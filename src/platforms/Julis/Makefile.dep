@@ -1,0 +1,17 @@
+#USEMODULE += pthread
+USEMODULE += ipv4_addr
+USEMODULE += lwip_arp
+USEMODULE += lwip_ipv4
+USEMODULE += lwip_dhcp_auto
+  
+USEMODULE += lwip lwip_sock_ip lwip_netdev
+USEMODULE += lwip_udp lwip_sock_udp
+USEMODULE += lwip_tcp lwip_sock_tcp
+USEMODULE += netdev_default lwip_ethernet lwip_stats netdev_default
+
+USEMODULE += stm32_eth  
+#USEMODULE += auto_init_gnrc_netif netdev_default gnrc_netdev_default
+
+
+#USEMODULE += MiyakoLink_platform_common
+include $(RIOTBOARD)/common/nucleo/Makefile.dep

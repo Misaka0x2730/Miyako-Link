@@ -1,0 +1,5 @@
+*.pdf
+*.project
+*.cproject
+*.settings
+*lib
