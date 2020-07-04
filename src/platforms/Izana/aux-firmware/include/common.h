@@ -8,4 +8,6 @@ typedef enum {
 	ERR_INV_ARG
 } err_code;
 
+#define COUNT_OF(arr)	((sizeof(arr))/(sizeof((arr)[0])))
+
 #endif /* __COMMON_H_ */

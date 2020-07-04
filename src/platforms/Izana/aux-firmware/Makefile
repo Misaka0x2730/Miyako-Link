@@ -13,14 +13,18 @@ SRC = $(SRC_DIR)/startup.c \
 	  $(SRC_DIR)/device.c \
 	  $(SRC_DIR)/target.c
 
-BSP_DIR = bsp/lpc_chip_8xx
+BSP_DIR = bsp/lpc_chip_82x
 BSP_SRC_DIR = $(BSP_DIR)/src
-BSP_SRC = $(BSP_SRC_DIR)/chip_8xx.c \
+BSP_SRC = $(BSP_SRC_DIR)/adc_8xx.c \
+          $(BSP_SRC_DIR)/chip_8xx.c \
           $(BSP_SRC_DIR)/clock_8xx.c \
           $(BSP_SRC_DIR)/gpio_8xx.c \
+          $(BSP_SRC_DIR)/iocon_8xx.c \
           $(BSP_SRC_DIR)/irc_8xx.c \
           $(BSP_SRC_DIR)/pinint_8xx.c \
-          $(BSP_SRC_DIR)/syscon_8xx.c
+          $(BSP_SRC_DIR)/swm_8xx.c \
+          $(BSP_SRC_DIR)/syscon_8xx.c \
+          $(BSP_SRC_DIR)/uart_8xx.c
 
 OBJECT_DIR = obj
 BSP_OBJECT_DIR = $(OBJECT_DIR)/bsp
@@ -35,7 +39,7 @@ CFLAGS_CPU = -mcpu=cortex-m0plus -mthumb
 ifeq ($(DEBUG), 1)
 CFLAGS_OPT = -O0
 else
-CFLAGS_OPT = -Os	
+CFLAGS_OPT = -fdata-sections -ffunction-sections -Os	
 endif
 CFLAGS_DEFINE = -DCORE_M0PLUS
 CFLAGS_INCLUDE = -Iinclude -I$(BSP_DIR)/inc
@@ -46,7 +50,7 @@ MAP_FILE = $(BIN_DIR)/$(APPLICATION)_aux_fw.map
 LDFLAGS = -nostartfiles -Xlinker --gc-sections -Wl,-Map,$(MAP_FILE)
 
 aux_fw: clean $(TARGET_BIN)
-	@echo $(APPLICATION)
+	@echo "Completed!"
 
 $(TARGET_BIN): $(OBJECTS) $(BSP_OBJECTS)
 	@mkdir -p $(BIN_DIR)
