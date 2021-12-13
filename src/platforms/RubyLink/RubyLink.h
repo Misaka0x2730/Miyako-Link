@@ -1,0 +1,27 @@
+#ifndef _BOARDS_RUBYLINK_H
+#define _BOARDS_RUBYLINK_H
+
+// For board detection
+#define RUBYLINK
+
+// --- FLASH ---
+
+#define PICO_BOOT_STAGE2_CHOOSE_W25Q080 1
+
+#ifndef PICO_FLASH_SPI_CLKDIV
+#define PICO_FLASH_SPI_CLKDIV 2
+#endif
+
+#ifndef PICO_FLASH_SIZE_BYTES
+#define PICO_FLASH_SIZE_BYTES (16 * 1024 * 1024)
+#endif
+
+#ifndef PICO_FLOAT_SUPPORT_ROM_V1
+#define PICO_FLOAT_SUPPORT_ROM_V1 0
+#endif
+
+#ifndef PICO_DOUBLE_SUPPORT_ROM_V1
+#define PICO_DOUBLE_SUPPORT_ROM_V1 0
+#endif
+
+#endif

@@ -1,0 +1,3 @@
+CPU := rpx0xx
+
+FEATURES_PROVIDED += periph_timer
