@@ -110,5 +110,6 @@ static type *get_##name(void)							\
 int get_interface_number(void);
 bool set_interface_number(int number);
 void interface_numbers_init(void);
+bool free_interface(int number);
 #endif
 

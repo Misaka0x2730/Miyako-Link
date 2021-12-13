@@ -36,7 +36,6 @@
 #define GDB_THREAD_PRIO			(THREAD_PRIORITY_MAIN-2)
 #define MORSE_THREAD_PRIO		(THREAD_PRIORITY_MIN-1)
 
-
 static char gdb_stack[MAX_GDB_NUMBER][GDB_STACK_SIZE] = {0};
 static char morse_stack[INTERFACE_NUMBER][THREAD_STACKSIZE_TINY] = {0};
 
@@ -66,7 +65,7 @@ void *morse_thread(void *arg)
 	int number = *(int*)arg;
 
 	while(1) {
-		SET_ERROR_STATE(morse_update(number));
+		//SET_ERROR_STATE(morse_update(number));
 		xtimer_usleep(MORSE_PERIOD*1000);
 	}
 }
@@ -93,15 +92,13 @@ void gdb_threads_start(void)
 	}
 }
 
-int
-main(void)
+int main(void)
 {
-	platform_init();
-	gdb_threads_start();
+	//platform_init();
+	//gdb_threads_start();
 	//__disable_irq();
-	platform_cdc_start();
+	//platform_cdc_start();
 	//__enable_irq();
-
 
 	while(1);
 	return 0;

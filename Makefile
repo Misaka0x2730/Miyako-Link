@@ -1,7 +1,7 @@
 APPLICATION = MiyakoLink
 export APPLICATION
 
-PLATFORM_LIST = Julis Izana
+PLATFORM_LIST = Julis Izana RubyLink
 
 .PHONY: all clean $(PLATFORM_LIST) $(addsuffix _clean, $(PLATFORM_LIST))
 
@@ -28,3 +28,9 @@ Izana:
 
 Izana_clean:
 	$(MAKE) $(MFLAGS) -C src/platforms/Izana/aux-firmware clean
+
+RubyLink:
+	$(MAKE) $(MFLAGS) -C src BOARD=$@
+
+RubyLink_clean:
+	$(MAKE) $(MFLAGS) -C src BOARD=RubyLink clean
