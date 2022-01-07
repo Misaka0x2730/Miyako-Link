@@ -21,7 +21,9 @@
 #ifndef __SWDPTAP_H
 #define __SWDPTAP_H
 
-int swdptap_init(void);
+#include "adiv5.h"
+
+int swdptap_init(ADIv5_DP_t *dp);
 
 /* Primitive functions */
 bool swdptap_bit_in(gpio_t *pin_list);

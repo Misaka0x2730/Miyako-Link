@@ -29,8 +29,8 @@
 #include "target_internal.h"
 #include "cortexm.h"
 
-#define SRAM_BASE            0x20000000
-#define STUB_BUFFER_BASE     ALIGN(SRAM_BASE + sizeof(lmi_flash_write_stub), 4)
+#define TARGET_SRAM_BASE     0x20000000
+#define STUB_BUFFER_BASE     ALIGN(TARGET_SRAM_BASE + sizeof(lmi_flash_write_stub), 4)
 
 #define BLOCK_SIZE           0x400
 
@@ -59,9 +59,9 @@ static const uint16_t lmi_flash_write_stub[] = {
 
 static void lmi_add_flash(target *t, size_t length)
 {
-	struct target_flash *f = calloc(1, sizeof(*f));
-	if (!f) {			/* calloc failed: heap exhaustion */
-		DEBUG("calloc: failed in %s\n", __func__);
+	struct target_flash *f = MemManager_Alloc(sizeof(*f));
+	if (!f) {			/* MemManager_Alloc failed: heap exhaustion */
+		DEBUG_WARN("MemManager_Alloc: failed in %s\n", __func__);
 		return;
 	}
 
@@ -100,11 +100,18 @@ bool lmi_probe(target *t)
 		lmi_add_flash(t, 0x10000);
 		t->target_options |= CORTEXM_TOPT_INHIBIT_SRST;
 		return true;
+
+	case 0x101F:    /* TM4C1294NCPDT */
+		t->driver = lmi_driver_str;
+		target_add_ram(t, 0x20000000, 0x40000);
+		lmi_add_flash(t, 0x100000);
+		t->target_options |= CORTEXM_TOPT_INHIBIT_SRST;
+		return true;
 	}
 	return false;
 }
 
-int lmi_flash_erase(struct target_flash *f, target_addr addr, size_t len)
+static int lmi_flash_erase(struct target_flash *f, target_addr addr, size_t len)
 {
 	target  *t = f->t;
 
@@ -128,19 +135,19 @@ int lmi_flash_erase(struct target_flash *f, target_addr addr, size_t len)
 	return 0;
 }
 
-int lmi_flash_write(struct target_flash *f,
+static int lmi_flash_write(struct target_flash *f,
                     target_addr dest, const void *src, size_t len)
 {
 	target  *t = f->t;
 
 	target_check_error(t);
 
-	target_mem_write(t, SRAM_BASE, lmi_flash_write_stub,
+	target_mem_write(t, TARGET_SRAM_BASE, lmi_flash_write_stub,
 	                 sizeof(lmi_flash_write_stub));
 	target_mem_write(t, STUB_BUFFER_BASE, src, len);
 
 	if (target_check_error(t))
 		return -1;
 
-	return cortexm_run_stub(t, SRAM_BASE, dest, STUB_BUFFER_BASE, len, 0);
+	return cortexm_run_stub(t, TARGET_SRAM_BASE, dest, STUB_BUFFER_BASE, len, 0);
 }

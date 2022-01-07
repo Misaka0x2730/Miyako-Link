@@ -21,7 +21,9 @@
 #ifndef __GDB_MAIN_H
 #define __GDB_MAIN_H
 
-//void gdb_main(void);
 void gdb_main(void);
+int gdb_main_loop(struct target_controller *tc, bool in_syscall);
+void gdb_main_init_target_controller(struct target_controller *tc);
+
 #endif
 

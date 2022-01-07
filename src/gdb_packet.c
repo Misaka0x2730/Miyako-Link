@@ -27,8 +27,12 @@
 #include "gdb_packet.h"
 #include "hex_utils.h"
 #include "remote.h"
+#include "mem_manager.h"
 
 #include <stdarg.h>
+
+#define GDB_OUT_PACKET_SIZE   (POOL_SIZE_2048)
+#define GDB_PUT_PACKET_SIZE   (POOL_SIZE_4096)
 
 int gdb_getpacket(char *packet, int size)
 {
@@ -180,31 +184,47 @@ void gdb_putpacket_f(const char *fmt, ...)
 	int size;
 
 	va_start(ap, fmt);
-	size = vasprintf(&buf, fmt, ap);
-	gdb_putpacket(buf, size);
-	free(buf);
+    buf = (char*)MemManager_Alloc(GDB_PUT_PACKET_SIZE);
+    size = vsnprintf(buf, GDB_PUT_PACKET_SIZE, fmt, ap);
+
+    if (size > 0)
+    {
+        gdb_putpacket(buf, size);
+    }
+    MemManager_Free((void*)buf);
 	va_end(ap);
 }
 
 void gdb_out(const char *buf)
 {
 	char *hexdata;
-	int i;
+	int i = strlen(buf)*2 + 1;
 
-	hexdata = alloca((i = strlen(buf)*2 + 1) + 1);
+    if (i >= GDB_PUT_PACKET_SIZE)
+    {
+        //TODO: assert
+        return;
+    }
+
+    hexdata = MemManager_Alloc(i + 1);
 	hexdata[0] = 'O';
 	hexify(hexdata+1, buf, strlen(buf));
 	gdb_putpacket(hexdata, i);
+    MemManager_Free(hexdata);
 }
 
 void gdb_voutf(const char *fmt, va_list ap)
 {
 	char *buf;
 
-	if (vasprintf(&buf, fmt, ap) < 0)
-		return;
-	gdb_out(buf);
-	free(buf);
+    buf = (char*)MemManager_Alloc(GDB_OUT_PACKET_SIZE);
+
+    if (vsnprintf(buf, GDB_OUT_PACKET_SIZE, fmt, ap) > 0)
+    {
+        gdb_out(buf);
+    }
+
+    MemManager_Free((void*)buf);
 }
 
 void gdb_outf(const char *fmt, ...)

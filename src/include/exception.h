@@ -58,10 +58,8 @@ struct exception {
 	struct exception *outer;
 };
 
-//extern struct exception *innermost_exception;
-
-struct exception *get_innermost_exception(void);
-void set_innermost_exception(struct exception *e);
+extern struct exception *get_innermost_exception();
+extern void set_innermost_exception(struct exception* e);
 
 #define TRY_CATCH(e, type_mask) \
 	(e).type = 0; \

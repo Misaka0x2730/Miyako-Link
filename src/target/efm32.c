@@ -42,8 +42,8 @@
 #include "target_internal.h"
 #include "cortexm.h"
 
-#define SRAM_BASE		0x20000000
-#define STUB_BUFFER_BASE	ALIGN(SRAM_BASE + sizeof(efm32_flash_write_stub), 4)
+#define TARGET_SRAM_BASE		0x20000000
+#define STUB_BUFFER_BASE	ALIGN(TARGET_SRAM_BASE + sizeof(efm32_flash_write_stub), 4)
 
 static int efm32_flash_erase(struct target_flash *t, target_addr addr, size_t len);
 static int efm32_flash_write(struct target_flash *f,
@@ -267,75 +267,75 @@ const struct command_s efm32_cmd_list[] = {
 /* -------------------------------------------------------------------------- */
 
 typedef struct efm32_device_t {
-	uint16_t family_id;	/* Family for device matching */
-	char* name;			/* Friendly device family name */
-	uint32_t flash_page_size;	/* Flash page size */
-	uint32_t msc_addr;			/* MSC Address */
+	uint8_t family_id;	/* Family for device matching */
 	bool has_radio;		   /* Indicates a device has attached radio */
-	uint32_t user_data_size;	/* User Data (UD) region size */
-	uint32_t bootloader_size;	/* Bootloader (BL) region size (may be 0 for no BL region) */
+	uint16_t flash_page_size;	/* Flash page size */
+	char* name;			/* Friendly device family name */
+	uint32_t msc_addr;			/* MSC Address */
+	uint16_t user_data_size;	/* User Data (UD) region size */
+	uint16_t bootloader_size;	/* Bootloader (BL) region size (may be 0 for no BL region) */
 	char* description;	   /* Human-readable description */
 } efm32_device_t;
 
 efm32_device_t const efm32_devices[] = {
 	/*  First gen micros */
-	{71, "EFM32G", 512, 0x400c0000, false, 512, 0, "Gecko"},
-	{72, "EFM32GG", 2048, 0x400c0000, false, 4096, 0, "Giant Gecko"},
-	{73, "EFM32TG", 512, 0x400c0000, false, 512, 0, "Tiny Gecko"},
-	{74, "EFM32LG", 2048, 0x400c0000, false, 2048, 0, "Leopard Gecko"},
-	{75, "EFM32WG", 2048, 0x400c0000, false, 2048, 0, "Wonder Gecko"},
-	{76, "EFM32ZG", 1024, 0x400c0000, false, 1024, 0, "Zero Gecko"},
-	{77, "EFM32HG", 1024, 0x400c0000, false, 1024, 0, "Happy Gecko"},
+	{ 71, false,  512, "EFM32G"    , 0x400c0000,  512, 0, "Gecko"},
+	{ 72, false, 2048, "EFM32GG"   , 0x400c0000, 4096, 0, "Giant Gecko"},
+	{ 73, false,  512, "EFM32TG"   , 0x400c0000,  512, 0, "Tiny Gecko"},
+	{ 74, false, 2048, "EFM32LG"   , 0x400c0000, 2048, 0, "Leopard Gecko"},
+	{ 75, false, 2048, "EFM32WG"   , 0x400c0000, 2048, 0, "Wonder Gecko"},
+	{ 76, false, 1024, "EFM32ZG"   , 0x400c0000, 1024, 0, "Zero Gecko"},
+	{ 77, false, 1024, "EFM32HG"   , 0x400c0000, 1024, 0, "Happy Gecko"},
 	/*  First (1.5) gen micro + radio */
-	{120, "EZR32WG", 2048, 0x400c0000, true, 2048, 0, "EZR Wonder Gecko"},
-	{121, "EZR32LG", 2048, 0x400c0000, true, 2048, 0, "EZR Leopard Gecko"},
-	{122, "EZR32HG", 1024, 0x400c0000, true, 1024, 0, "EZR Happy Gecko"},
+	{120, true , 2048, "EZR32WG"   , 0x400c0000, 2048, 0, "EZR Wonder Gecko"},
+	{121, true , 2048, "EZR32LG"   , 0x400c0000, 2048, 0, "EZR Leopard Gecko"},
+	{122, true , 1024, "EZR32HG"   , 0x400c0000, 1024, 0, "EZR Happy Gecko"},
 	/*  Second gen micros */
-	{81, "EFM32PG1B", 2048, 0x400e0000, false, 2048, 10240, "Pearl Gecko"},
-	{83, "EFM32JG1B", 2048, 0x400e0000, false, 2048, 10240, "Jade Gecko"},
-	{85, "EFM32PG12B", 2048, 0x400e0000, false, 2048, 32768,"Pearl Gecko 12"},
-	{87, "EFM32JG12B", 2048, 0x400e0000, false, 2048, 32768, "Jade Gecko 12"},
+	{ 81, false, 2048, "EFM32PG1B" , 0x400e0000, 2048, 10240, "Pearl Gecko"},
+	{ 83, false, 2048, "EFM32JG1B" , 0x400e0000, 2048, 10240, "Jade Gecko"},
+	{ 85, false, 2048, "EFM32PG12B", 0x400e0000, 2048, 32768,"Pearl Gecko 12"},
+	{ 87, false, 2048, "EFM32JG12B", 0x400e0000, 2048, 32768, "Jade Gecko 12"},
 	/*  Second (2.5) gen micros, with re-located MSC */
-	{100, "EFM32GG11B", 4096, 0x40000000, false, 4096, 32768, "Giant Gecko 11"},
-	{103, "EFM32TG11B", 2048, 0x40000000, false, 2048, 18432, "Tiny Gecko 11"},
-	{106, "EFM32GG12B", 2048, 0x40000000, false, 2048, 32768, "Giant Gecko 12"},
+	{100, false, 4096, "EFM32GG11B", 0x40000000, 4096, 32768, "Giant Gecko 11"},
+	{103, false, 2048, "EFM32TG11B", 0x40000000, 2048, 18432, "Tiny Gecko 11"},
+	{106, false, 2048, "EFM32GG12B", 0x40000000, 2048, 32768, "Giant Gecko 12"},
 	/*  Second gen devices micro + radio */
-	{16, "EFR32MG1P", 2048, 0x400e0000, true, 2048, 10240, "Mighty Gecko"},
-	{17, "EFR32MG1B", 2048, 0x400e0000, true, 2048, 10240, "Mighty Gecko"},
-	{18, "EFR32MG1V", 2048, 0x400e0000, true, 2048, 10240, "Mighty Gecko"},
-	{19, "EFR32BG1P", 2048, 0x400e0000, true, 2048, 10240, "Blue Gecko"},
-	{20, "EFR32BG1B", 2048, 0x400e0000, true, 2048, 10240, "Blue Gecko"},
-	{21, "EFR32BG1V", 2048, 0x400e0000, true, 2048, 10240, "Blue Gecko"},
-	{25, "EFR32FG1P", 2048, 0x400e0000, true, 2048, 10240, "Flex Gecko"},
-	{26, "EFR32FG1B", 2048, 0x400e0000, true, 2048, 10240, "Flex Gecko"},
-	{27, "EFR32FG1V", 2048, 0x400e0000, true, 2048, 10240, "Flex Gecko"},
-	{28, "EFR32MG12P", 2048, 0x400e0000, true, 2048, 32768, "Mighty Gecko"},
-	{29, "EFR32MG12B", 2048, 0x400e0000, true, 2048, 32768, "Mighty Gecko"},
-	{30, "EFR32MG12V", 2048, 0x400e0000, true, 2048, 32768, "Mighty Gecko"},
-	{31, "EFR32BG12P", 2048, 0x400e0000, true, 2048, 32768, "Blue Gecko"},
-	{32, "EFR32BG12B", 2048, 0x400e0000, true, 2048, 32768, "Blue Gecko"},
-	{33, "EFR32BG12V", 2048, 0x400e0000, true, 2048, 32768, "Blue Gecko"},
-	{37, "EFR32FG12P", 2048, 0x400e0000, true, 2048, 32768, "Flex Gecko"},
-	{38, "EFR32FG12B", 2048, 0x400e0000, true, 2048, 32768, "Flex Gecko"},
-	{39, "EFR32FG12V", 2048, 0x400e0000, true, 2048, 32768, "Flex Gecko"},
-	{40, "EFR32MG13P", 2048, 0x400e0000, true, 2048, 16384, "Mighty Gecko"},
-	{41, "EFR32MG13B", 2048, 0x400e0000, true, 2048, 16384, "Mighty Gecko"},
-	{42, "EFR32MG13V", 2048, 0x400e0000, true, 2048, 16384, "Mighty Gecko"},
-	{43, "EFR32BG13P", 2048, 0x400e0000, true, 2048, 16384, "Blue Gecko"},
-	{44, "EFR32BG13B", 2048, 0x400e0000, true, 2048, 16384, "Blue Gecko"},
-	{45, "EFR32BG13V", 2048, 0x400e0000, true, 2048, 16384, "Blue Gecko"},
-	{49, "EFR32FG13P", 2048, 0x400e0000, true, 2048, 16384, "Flex Gecko"},
-	{50, "EFR32FG13B", 2048, 0x400e0000, true, 2048, 16384, "Flex Gecko"},
-	{51, "EFR32FG13V", 2048, 0x400e0000, true, 2048, 16384, "Flex Gecko"},
-	{52, "EFR32MG14P", 2048, 0x400e0000, true, 2048, 16384, "Mighty Gecko"},
-	{53, "EFR32MG14B", 2048, 0x400e0000, true, 2048, 16384, "Mighty Gecko"},
-	{54, "EFR32MG14V", 2048, 0x400e0000, true, 2048, 16384, "Mighty Gecko"},
-	{55, "EFR32BG14P", 2048, 0x400e0000, true, 2048, 16384, "Blue Gecko"},
-	{56, "EFR32BG14B", 2048, 0x400e0000, true, 2048, 16384, "Blue Gecko"},
-	{57, "EFR32BG14V", 2048, 0x400e0000, true, 2048, 16384, "Blue Gecko"},
-	{61, "EFR32FG14P", 2048, 0x400e0000, true, 2048, 16384, "Flex Gecko"},
-	{62, "EFR32FG14B", 2048, 0x400e0000, true, 2048, 16384, "Flex Gecko"},
-	{63, "EFR32FG14V", 2048, 0x400e0000, true, 2048, 16384, "Flex Gecko"},
+	{ 16, true , 2048, "EFR32MG1P" , 0x400e0000, 2048, 10240, "Mighty Gecko"},
+	{ 17, true , 2048, "EFR32MG1B" , 0x400e0000, 2048, 10240, "Mighty Gecko"},
+	{ 18, true , 2048, "EFR32MG1V" , 0x400e0000, 2048, 10240, "Mighty Gecko"},
+	{ 19, true , 2048, "EFR32BG1P" , 0x400e0000, 2048, 10240, "Blue Gecko"},
+	{ 20, true , 2048, "EFR32BG1B" , 0x400e0000, 2048, 10240, "Blue Gecko"},
+	{ 21, true , 2048, "EFR32BG1V" , 0x400e0000, 2048, 10240, "Blue Gecko"},
+	{ 25, true , 2048, "EFR32FG1P" , 0x400e0000, 2048, 10240, "Flex Gecko"},
+	{ 26, true , 2048, "EFR32FG1B" , 0x400e0000, 2048, 10240, "Flex Gecko"},
+	{ 27, true , 2048, "EFR32FG1V" , 0x400e0000, 2048, 10240, "Flex Gecko"},
+	{ 28, true , 2048, "EFR32MG12P", 0x400e0000, 2048, 32768, "Mighty Gecko"},
+	{ 29, true , 2048, "EFR32MG12B", 0x400e0000, 2048, 32768, "Mighty Gecko"},
+	{ 30, true , 2048, "EFR32MG12V", 0x400e0000, 2048, 32768, "Mighty Gecko"},
+	{ 31, true , 2048, "EFR32BG12P", 0x400e0000, 2048, 32768, "Blue Gecko"},
+	{ 32, true , 2048, "EFR32BG12B", 0x400e0000, 2048, 32768, "Blue Gecko"},
+	{ 33, true , 2048, "EFR32BG12V", 0x400e0000, 2048, 32768, "Blue Gecko"},
+	{ 37, true , 2048, "EFR32FG12P", 0x400e0000, 2048, 32768, "Flex Gecko"},
+	{ 38, true , 2048, "EFR32FG12B", 0x400e0000, 2048, 32768, "Flex Gecko"},
+	{ 39, true , 2048, "EFR32FG12V", 0x400e0000, 2048, 32768, "Flex Gecko"},
+	{ 40, true , 2048, "EFR32MG13P", 0x400e0000, 2048, 16384, "Mighty Gecko"},
+	{ 41, true , 2048, "EFR32MG13B", 0x400e0000, 2048, 16384, "Mighty Gecko"},
+	{ 42, true , 2048, "EFR32MG13V", 0x400e0000, 2048, 16384, "Mighty Gecko"},
+	{ 43, true , 2048, "EFR32BG13P", 0x400e0000, 2048, 16384, "Blue Gecko"},
+	{ 44, true , 2048, "EFR32BG13B", 0x400e0000, 2048, 16384, "Blue Gecko"},
+	{ 45, true , 2048, "EFR32BG13V", 0x400e0000, 2048, 16384, "Blue Gecko"},
+	{ 49, true , 2048, "EFR32FG13P", 0x400e0000, 2048, 16384, "Flex Gecko"},
+	{ 50, true , 2048, "EFR32FG13B", 0x400e0000, 2048, 16384, "Flex Gecko"},
+	{ 51, true , 2048, "EFR32FG13V", 0x400e0000, 2048, 16384, "Flex Gecko"},
+	{ 52, true , 2048, "EFR32MG14P", 0x400e0000, 2048, 16384, "Mighty Gecko"},
+	{ 53, true , 2048, "EFR32MG14B", 0x400e0000, 2048, 16384, "Mighty Gecko"},
+	{ 54, true , 2048, "EFR32MG14V", 0x400e0000, 2048, 16384, "Mighty Gecko"},
+	{ 55, true , 2048, "EFR32BG14P", 0x400e0000, 2048, 16384, "Blue Gecko"},
+	{ 56, true , 2048, "EFR32BG14B", 0x400e0000, 2048, 16384, "Blue Gecko"},
+	{ 57, true , 2048, "EFR32BG14V", 0x400e0000, 2048, 16384, "Blue Gecko"},
+	{ 61, true , 2048, "EFR32FG14P", 0x400e0000, 2048, 16384, "Flex Gecko"},
+	{ 62, true , 2048, "EFR32FG14B", 0x400e0000, 2048, 16384, "Flex Gecko"},
+	{ 63, true , 2048, "EFR32FG14V", 0x400e0000, 2048, 16384, "Flex Gecko"},
 };
 
 
@@ -379,7 +379,7 @@ efm32_v2_di_tempgrade_t const efm32_v2_di_tempgrades[] = {
 /**
  * Reads the EFM32 Extended Unique Identifier EUI64 (V1)
  */
-uint64_t efm32_v1_read_eui64(target *t)
+static uint64_t efm32_v1_read_eui64(target *t)
 {
 	uint64_t eui;
 
@@ -388,10 +388,12 @@ uint64_t efm32_v1_read_eui64(target *t)
 
 	return eui;
 }
+
+#if 0
 /**
  * Reads the EFM32 Extended Unique Identifier EUI48 (V2)
  */
-uint64_t efm32_v2_read_eui48(target *t)
+static uint64_t efm32_v2_read_eui48(target *t)
 {
 	uint64_t eui;
 
@@ -400,10 +402,11 @@ uint64_t efm32_v2_read_eui48(target *t)
 
 	return eui;
 }
+#endif
 /**
  * Reads the Unique Number (DI V2 only)
  */
-uint64_t efm32_v2_read_unique(target *t, uint8_t di_version)
+static uint64_t efm32_v2_read_unique(target *t, uint8_t di_version)
 {
 	uint64_t unique;
 	switch (di_version) {
@@ -419,7 +422,7 @@ uint64_t efm32_v2_read_unique(target *t, uint8_t di_version)
 /**
  * Reads the EFM32 flash size in kiB
  */
-uint16_t efm32_read_flash_size(target *t, uint8_t di_version)
+static uint16_t efm32_read_flash_size(target *t, uint8_t di_version)
 {
 	switch (di_version) {
 	case 1:
@@ -433,7 +436,7 @@ uint16_t efm32_read_flash_size(target *t, uint8_t di_version)
 /**
  * Reads the EFM32 RAM size in kiB
  */
-uint16_t efm32_read_ram_size(target *t, uint8_t di_version)
+static uint16_t efm32_read_ram_size(target *t, uint8_t di_version)
 {
 	switch (di_version) {
 	case 1:
@@ -450,7 +453,7 @@ uint16_t efm32_read_ram_size(target *t, uint8_t di_version)
  * value. There are errata on the value reported by the EFM32
  * eg. DI_101
  */
-uint32_t efm32_flash_page_size(target *t, uint8_t di_version)
+static uint32_t efm32_flash_page_size(target *t, uint8_t di_version)
 {
 	uint8_t mem_info_page_size;
 
@@ -472,7 +475,7 @@ uint32_t efm32_flash_page_size(target *t, uint8_t di_version)
 /**
  * Reads the EFM32 Part Number
  */
-uint16_t efm32_read_part_number(target *t, uint8_t di_version)
+static uint16_t efm32_read_part_number(target *t, uint8_t di_version)
 {
 	switch (di_version) {
 	case 1:
@@ -486,7 +489,7 @@ uint16_t efm32_read_part_number(target *t, uint8_t di_version)
 /**
  * Reads the EFM32 Part Family
  */
-uint8_t efm32_read_part_family(target *t, uint8_t di_version)
+static uint8_t efm32_read_part_family(target *t, uint8_t di_version)
 {
 	switch (di_version) {
 	case 1:
@@ -500,7 +503,7 @@ uint8_t efm32_read_part_family(target *t, uint8_t di_version)
 /**
  * Reads the EFM32 Radio part number (EZR parts with V1 DI only)
  */
-uint16_t efm32_read_radio_part_number(target *t, uint8_t di_version)
+static uint16_t efm32_read_radio_part_number(target *t, uint8_t di_version)
 {
 	switch (di_version) {
 	case 1:
@@ -513,7 +516,7 @@ uint16_t efm32_read_radio_part_number(target *t, uint8_t di_version)
 /**
  * Reads the EFM32 Misc. Chip definitions
  */
-efm32_v2_di_miscchip_t efm32_v2_read_miscchip(target *t, uint8_t di_version)
+static efm32_v2_di_miscchip_t efm32_v2_read_miscchip(target *t, uint8_t di_version)
 {
 	uint32_t meminfo;
 	efm32_v2_di_miscchip_t miscchip;
@@ -538,9 +541,9 @@ efm32_v2_di_miscchip_t efm32_v2_read_miscchip(target *t, uint8_t di_version)
 static void efm32_add_flash(target *t, target_addr addr, size_t length,
 			    size_t page_size)
 {
-	struct target_flash *f = calloc(1, sizeof(*f));
-	if (!f) {			/* calloc failed: heap exhaustion */
-		DEBUG("calloc: failed in %s\n", __func__);
+	struct target_flash *f = MemManager_Alloc(sizeof(*f));
+	if (!f) {			/* MemManager_Alloc failed: heap exhaustion */
+		DEBUG_WARN("MemManager_Alloc: failed in %s\n", __func__);
 		return;
 	}
 
@@ -556,7 +559,7 @@ static void efm32_add_flash(target *t, target_addr addr, size_t length,
 /**
  * Lookup device
  */
-size_t efm32_lookup_device_index(target *t, uint8_t di_version)
+static size_t efm32_lookup_device_index(target *t, uint8_t di_version)
 {
 	uint8_t part_family = efm32_read_part_family(t, di_version);
 
@@ -569,7 +572,8 @@ size_t efm32_lookup_device_index(target *t, uint8_t di_version)
 	/* Unknown family */
 	return 9999;
 }
-efm32_device_t const * efm32_get_device(size_t index)
+
+static efm32_device_t const * efm32_get_device(size_t index)
 {
 	if (index >= (sizeof(efm32_devices) / sizeof(efm32_device_t))) {
 		return NULL;
@@ -580,9 +584,12 @@ efm32_device_t const * efm32_get_device(size_t index)
 /**
  * Probe
  */
+struct efm32_priv_s {
+	char efm32_variant_string[60];
+};
+
 bool efm32_probe(target *t)
 {
-	char variant_string[60];
 	uint8_t di_version = 1;
 
 	/* Read the IDCODE register from the SW-DP */
@@ -632,15 +639,19 @@ bool efm32_probe(target *t)
 	uint32_t ram_size   = ram_kib   * 0x400;
 	uint32_t flash_page_size = device->flash_page_size;
 
-	snprintf(variant_string, sizeof(variant_string), "%c\b%c\b%s %d F%d %s",
+	struct efm32_priv_s *priv_storage = MemManager_Alloc(sizeof(*priv_storage));
+	t->target_storage = (void*)priv_storage;
+
+	snprintf(priv_storage->efm32_variant_string,
+			 sizeof(priv_storage->efm32_variant_string), "%c\b%c\b%s %d F%d %s",
 			di_version + 48, (uint8_t)device_index + 32,
 			device->name, part_number, flash_kib, device->description);
 
 	/* Setup Target */
 	t->target_options |= CORTEXM_TOPT_INHIBIT_SRST;
-	t->driver = variant_string;
+	t->driver = priv_storage->efm32_variant_string;
 	tc_printf(t, "flash size %d page size %d\n", flash_size, flash_page_size);
-	target_add_ram (t, SRAM_BASE, ram_size);
+	target_add_ram (t, TARGET_SRAM_BASE, ram_size);
 	efm32_add_flash(t, 0x00000000, flash_size, flash_page_size);
 	if (device->user_data_size) { /* optional User Data (UD) section */
 		efm32_add_flash(t, 0x0fe00000, device->user_data_size, flash_page_size);
@@ -708,19 +719,19 @@ static int efm32_flash_write(struct target_flash *f,
 		return true;
 	}
 	/* Write flashloader */
-	target_mem_write(t, SRAM_BASE, efm32_flash_write_stub,
+	target_mem_write(t, TARGET_SRAM_BASE, efm32_flash_write_stub,
 			 sizeof(efm32_flash_write_stub));
 	/* Write Buffer */
 	target_mem_write(t, STUB_BUFFER_BASE, src, len);
 	/* Run flashloader */
-	int ret = cortexm_run_stub(t, SRAM_BASE, dest, STUB_BUFFER_BASE, len,
+	int ret = cortexm_run_stub(t, TARGET_SRAM_BASE, dest, STUB_BUFFER_BASE, len,
 							   device->msc_addr);
 
-#ifdef PLATFORM_HAS_DEBUG
+#ifdef ENABLE_DEBUG
 	/* Check the MSC_IF */
 	uint32_t msc = device->msc_addr;
 	uint32_t msc_if = target_mem_read32(t, EFM32_MSC_IF(msc));
-	DEBUG("EFM32: Flash write done MSC_IF=%08"PRIx32"\n", msc_if);
+	DEBUG_INFO("EFM32: Flash write done MSC_IF=%08"PRIx32"\n", msc_if);
 #endif
 	return ret;
 }
@@ -968,21 +979,18 @@ const struct command_s efm32_aap_cmd_list[] = {
 	{NULL, NULL, NULL}
 };
 
-static bool nop_function(void)
-{
-	return true;
-}
-
 /**
  * AAP Probe
  */
+struct efm32_aap_priv_s {
+       char aap_driver_string[42];
+};
+
 void efm32_aap_probe(ADIv5_AP_t *ap)
 {
-	char aap_driver_string[42];
-
 	if ((ap->idr & EFM32_APP_IDR_MASK) == EFM32_AAP_IDR) {
 		/* It's an EFM32 AAP! */
-		DEBUG("EFM32: Found EFM32 AAP\n");
+		DEBUG_INFO("EFM32: Found EFM32 AAP\n");
 	} else {
 		return;
 	}
@@ -991,7 +999,7 @@ void efm32_aap_probe(ADIv5_AP_t *ap)
 	uint16_t aap_revision = (uint16_t)((ap->idr & 0xF0000000) >> 28);
 
 	/* New target */
-	target *t = target_new();
+	target *t = target_new(&(ap->dp->tc->target_list));
 	adiv5_ap_ref(ap);
 	t->priv = ap;
 	t->priv_free = (void*)adiv5_ap_unref;
@@ -999,24 +1007,15 @@ void efm32_aap_probe(ADIv5_AP_t *ap)
 	//efm32_aap_cmd_device_erase(t);
 
 	/* Read status */
-	DEBUG("EFM32: AAP STATUS=%08"PRIx32"\n", adiv5_ap_read(ap, AAP_STATUS));
+	DEBUG_INFO("EFM32: AAP STATUS=%08"PRIx32"\n", adiv5_ap_read(ap, AAP_STATUS));
 
-	sprintf(aap_driver_string,
+	struct efm32_aap_priv_s *priv_storage = MemManager_Alloc(sizeof(*priv_storage));
+	sprintf(priv_storage->aap_driver_string,
 			"EFM32 Authentication Access Port rev.%d",
 			aap_revision);
-	t->driver = aap_driver_string;
-	t->attach = (void*)nop_function;
-	t->detach = (void*)nop_function;
-	t->check_error = (void*)nop_function;
-	t->mem_read = (void*)nop_function;
-	t->mem_write = (void*)nop_function;
+	t->driver = priv_storage->aap_driver_string;
 	t->regs_size = 4;
-	t->regs_read = (void*)nop_function;
-	t->regs_write = (void*)nop_function;
-	t->reset = (void*)nop_function;
-	t->halt_request = (void*)nop_function;
-	t->halt_resume = (void*)nop_function;
-
+    t->tc = ap->dp->tc;
 	target_add_commands(t, efm32_aap_cmd_list, t->driver);
 }
 
@@ -1029,15 +1028,15 @@ static bool efm32_aap_cmd_device_erase(target *t, int argc, const char **argv)
 
 	/* Read status */
 	status = adiv5_ap_read(ap, AAP_STATUS);
-	DEBUG("EFM32: AAP STATUS=%08"PRIx32"\n", status);
+	DEBUG_INFO("EFM32: AAP STATUS=%08"PRIx32"\n", status);
 
 	if (status & AAP_STATUS_ERASEBUSY) {
-		DEBUG("EFM32: AAP Erase in progress\n");
-		DEBUG("EFM32: -> ABORT\n");
+		DEBUG_WARN("EFM32: AAP Erase in progress\n");
+		DEBUG_WARN("EFM32: -> ABORT\n");
 		return false;
 	}
 
-	DEBUG("EFM32: Issuing DEVICEERASE...\n");
+	DEBUG_INFO("EFM32: Issuing DEVICEERASE...\n");
 	adiv5_ap_write(ap, AAP_CMDKEY, CMDKEY);
 	adiv5_ap_write(ap, AAP_CMD, 1);
 
@@ -1048,7 +1047,7 @@ static bool efm32_aap_cmd_device_erase(target *t, int argc, const char **argv)
 
 	/* Read status */
 	status = adiv5_ap_read(ap, AAP_STATUS);
-	DEBUG("EFM32: AAP STATUS=%08"PRIx32"\n", status);
+	DEBUG_INFO("EFM32: AAP STATUS=%08"PRIx32"\n", status);
 
 	return true;
 }

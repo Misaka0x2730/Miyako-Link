@@ -19,10 +19,6 @@
 #ifndef BOARD_H
 #define BOARD_H
 
-#include "cpu.h"
-#include "periph_conf.h"
-#include "periph_cpu.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -30,7 +26,7 @@ extern "C" {
 /**
  * @brief Initialize board specific hardware, including clock, LEDs and std-IO
  */
-void board_init(void);
+//void board_init(void);
 
 #ifdef __cplusplus
 }

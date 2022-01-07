@@ -28,6 +28,8 @@
 #include "morse.h"
 #include "platform.h"
 #include "gdb_if.h"
+#include "FreeRTOS.h"
+#include "task.h"
 
 const gpio_t *get_pin_list(int number)
 {
@@ -53,8 +55,7 @@ int platform_hwversion(void)
 
 void platform_init(void)
 {
-	interface_numbers_init();
-	cdc_acm_init();
+
 }
 
 void platform_interface_init(gpio_t *pin_list)
@@ -63,10 +64,6 @@ void platform_interface_init(gpio_t *pin_list)
 }
 
 void platform_cdc_start(void)
-{
-}
-
-void platform_srst_set_val(bool assert)
 {
 }
 
@@ -97,10 +94,21 @@ void platform_request_boot(void)
 
 void platform_delay(uint32_t ms)
 {
-	xtimer_usleep(ms*1000);
+    vTaskDelay(ms);
 }
 
 uint32_t platform_time_ms(void)
 {
-	return xtimer_now_usec()/1000;
+    const uint64_t current_time = System_GetUptime();
+	return (uint32_t)(current_time / 1000);
+}
+
+uint32_t platform_max_frequency_get(void)
+{
+    return 4000000;
+}
+
+void platform_max_frequency_set(uint32_t frequency)
+{
+    (void) frequency;
 }

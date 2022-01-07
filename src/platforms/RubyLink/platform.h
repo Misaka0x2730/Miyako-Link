@@ -24,13 +24,18 @@
 #ifndef __PLATFORM_H
 #define __PLATFORM_H
 
-#include "periph_conf.h"
-#include "xtimer.h"
+#include "include/periph_conf.h"
 #include "timing.h"
+#include "hardware/gpio.h"
 //#include "timing_stm32.h"
+
+//TODO: change to thread-safe variant
+extern uint8_t running_status;
 
 //#define PLATFORM_HAS_TRACESWO
 //#define PLATFORM_HAS_POWER_SWITCH
+
+#define PLATFORM_IDENT      "(RubyLink) "
 
 #define INTERFACE_NUMBER 			(2)
 #define MAX_GDB_NUMBER				(INTERFACE_NUMBER)
@@ -39,11 +44,15 @@
 #define PLATFORM_HAS_DEBUG
 #define USBUART_DEBUG
 #endif
-#define BOARD_IDENT             "Julis Probe"
+/*#define BOARD_IDENT             "Julis Probe"
 #define BOARD_IDENT_DFU	        "Julis Probe (Upgrade)"
 #define BOARD_IDENT_UPD	        "Julis Probe (DFU Upgrade)"
 #define DFU_IDENT               "Julis Probe Firmware Upgrade"
-#define UPD_IFACE_STRING        "@Internal Flash   /0x08000000/8*001Kg"
+#define UPD_IFACE_STRING        "@Internal Flash   /0x08000000/8*001Kg"*/
+
+#define SET_RUN_STATE(state)	{tc->running_status = (state);}
+#define SET_IDLE_STATE(state)
+#define SET_ERROR_STATE(state)
 
 #ifdef ENABLE_DEBUG
 
@@ -52,13 +61,36 @@
 #define DEBUG(...)
 #endif
 
-/* Use newlib provided integer only stdio functions */
-#define sscanf siscanf
-#define sprintf siprintf
-#define snprintf sniprintf
-#define vasprintf vasiprintf
+#define TDI_PIN		19
+#define TMS_PIN		17
+#define TCK_PIN		18
+#define TDO_PIN		14
+
+#define SWDIO_PIN	TMS_PIN
+#define SWCLK_PIN	TCK_PIN
+
+#define TMS_DIR_PIN	    16
+#define SWDIO_DIR_PIN	TMS_DIR_PIN
+
+#define TMS_SET_MODE() do { \
+	gpio_set_dir(TMS_DIR_PIN, GPIO_OUT); \
+    gpio_put(TMS_DIR_PIN, 1);   \
+} while(0)
+
+#define SWDIO_MODE_FLOAT() do { \
+    gpio_put(TMS_DIR_PIN, 0);                             \
+    gpio_pull_up(SWDIO_PIN);          \
+	gpio_set_dir(SWDIO_PIN, GPIO_IN); \
+} while(0)
+
+#define SWDIO_MODE_DRIVE() do { \
+    gpio_put(TMS_DIR_PIN, 1);          \
+	gpio_set_dir(SWDIO_PIN, GPIO_OUT);    \
+    gpio_put(SWDIO_PIN, 1);                              \
+} while(0)
 
 const gpio_t *get_pin_list(int number);
 void platform_cdc_start(void);
+uint32_t platform_max_frequency_get(void);
 
 #endif

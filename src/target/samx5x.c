@@ -31,9 +31,9 @@
  * particularly Sections 12. DSU and 25. NVMCTRL
  */
 
+#include "general.h"
 #include <ctype.h>
 
-#include "general.h"
 #include "target.h"
 #include "target_internal.h"
 #include "cortexm.h"
@@ -169,11 +169,8 @@ const struct command_s samx5x_protected_cmd_list[] = {
 #define SAMX5X_DSU_LENGTH			(SAMX5X_DSU_EXT_ACCESS + 0x08)
 #define SAMX5X_DSU_DATA				(SAMX5X_DSU_EXT_ACCESS + 0x0C)
 #define SAMX5X_DSU_DID				(SAMX5X_DSU_EXT_ACCESS + 0x18)
-#define SAMX5X_DSU_PID(n)			(SAMX5X_DSU + 0x1FE0 + \
-						(0x4 * (n % 4)) - \
-						 (0x10 * (n / 4)))
-#define SAMX5X_DSU_CID(n)			(SAMX5X_DSU + 0x1FF0 + \
-						 (0x4 * (n % 4)))
+#define SAMX5X_DSU_PID  			(SAMX5X_DSU + 0x1000)
+#define SAMX5X_DSU_CID  			(SAMX5X_DSU + 0x1010)
 
 /* Control and Status Register (CTRLSTAT) */
 #define SAMX5X_CTRL_CHIP_ERASE			(1 << 4)
@@ -218,23 +215,6 @@ const struct command_s samx5x_protected_cmd_list[] = {
 
 /* Component ID */
 #define SAMX5X_CID_VALUE			0xB105100D
-
-/**
- * Reads the SAM D5x/E5x Peripheral ID
- *
- * (Reuses the SAM D1x/2x implementation as it is identical)
- */
-extern uint64_t samd_read_pid(target *t);
-#define samx5x_read_pid samd_read_pid
-
-/**
- * Reads the SAM D5x/E5x Component ID
- *
- * (Reuses the SAM D1x/2x implementation as it is identical)
- */
-extern uint32_t samd_read_cid(target *t);
-#define samx5x_read_cid samd_read_cid
-
 
 /**
  * Overloads the default cortexm reset function with a version that
@@ -349,9 +329,9 @@ struct samx5x_descr samx5x_parse_device_id(uint32_t did)
 static void samx5x_add_flash(target *t, uint32_t addr, size_t length,
 			     size_t erase_block_size, size_t write_page_size)
 {
-	struct target_flash *f = calloc(1, sizeof(*f));
-	if (!f) {			/* calloc failed: heap exhaustion */
-		DEBUG("calloc: failed in %s\n", __func__);
+	struct target_flash *f = MemManager_Alloc(sizeof(*f));
+	if (!f) {			/* MemManager_Alloc failed: heap exhaustion */
+		DEBUG_INFO("MemManager_Alloc: failed in %s\n", __func__);
 		return;
 	}
 
@@ -364,11 +344,15 @@ static void samx5x_add_flash(target *t, uint32_t addr, size_t length,
 	target_add_flash(t, f);
 }
 
+struct samx5x_priv_s {
+	char samx5x_variant_string[60];
+};
+
 bool samx5x_probe(target *t)
 {
-	char variant_string[60];
-	uint32_t cid = samx5x_read_cid(t);
-	uint32_t pid = samx5x_read_pid(t);
+	ADIv5_AP_t *ap = cortexm_ap(t);
+	uint32_t cid = adiv5_ap_read_pidr(ap, SAMX5X_DSU_CID);
+	uint32_t pid = adiv5_ap_read_pidr(ap, SAMX5X_DSU_PID);
 
 	/* Check the ARM Coresight Component and Perhiperal IDs */
 	if ((cid != SAMX5X_CID_VALUE) ||
@@ -389,20 +373,25 @@ bool samx5x_probe(target *t)
 	bool protected = (ctrlstat & SAMX5X_STATUSB_PROT);
 
 	/* Part String */
+	struct samx5x_priv_s *priv_storage = MemManager_Alloc(sizeof(*priv_storage));
+	t->target_storage = (void*)priv_storage;
+
 	if (protected) {
-		snprintf(variant_string, sizeof(variant_string),
+		snprintf(priv_storage->samx5x_variant_string,
+				 sizeof(priv_storage->samx5x_variant_string),
 			 "Microchip SAM%c%d%c%dA (rev %c) (PROT=1)",
 			 samx5x.series_letter, samx5x.series_number,
 			 samx5x.pin, samx5x.mem, samx5x.revision);
 	} else {
-		snprintf(variant_string, sizeof(variant_string),
+		snprintf(priv_storage->samx5x_variant_string,
+				 sizeof(priv_storage->samx5x_variant_string),
 			 "Microchip SAM%c%d%c%dA (rev %c)",
 			 samx5x.series_letter, samx5x.series_number,
 			 samx5x.pin, samx5x.mem, samx5x.revision);
 	}
 
 	/* Setup Target */
-	t->driver = variant_string;
+	t->driver = priv_storage->samx5x_variant_string;
 	t->reset = samx5x_reset;
 
 	if (protected) {
@@ -481,19 +470,19 @@ static void samx5x_unlock_current_address(target *t)
 static void samx5x_print_nvm_error(uint16_t errs)
 {
 	if (errs & SAMX5X_INTFLAG_ADDRE) {
-		DEBUG(" ADDRE");
+		DEBUG_WARN(" ADDRE");
 	}
 	if (errs & SAMX5X_INTFLAG_PROGE) {
-		DEBUG(" PROGE");
+		DEBUG_WARN(" PROGE");
 	}
 	if (errs & SAMX5X_INTFLAG_LOCKE) {
-		DEBUG(" LOCKE");
+		DEBUG_WARN(" LOCKE");
 	}
 	if (errs & SAMX5X_INTFLAG_NVME) {
-		DEBUG(" NVME");
+		DEBUG_WARN(" NVME");
 	}
 
-	DEBUG("\n");
+	DEBUG_WARN("\n");
 }
 
 static int samx5x_read_nvm_error(target *t)
@@ -518,7 +507,7 @@ static int samx5x_check_nvm_error(target *t)
 	if (!errs)
 		return 0;
 
-	DEBUG("NVM error(s) detected:");
+	DEBUG_WARN("NVM error(s) detected:");
 	samx5x_print_nvm_error(errs);
 	return -1;
 }
@@ -538,7 +527,7 @@ static int samx5x_flash_erase(struct target_flash *f, target_addr addr,
 	target *t = f->t;
 	uint16_t errs = samx5x_read_nvm_error(t);
 	if (errs) {
-		DEBUG(NVM_ERROR_BITS_MSG, "erase", addr, len);
+		DEBUG_WARN(NVM_ERROR_BITS_MSG, "erase", addr, len);
 		samx5x_print_nvm_error(errs);
 		samx5x_clear_nvm_error(t);
 	}
@@ -552,11 +541,15 @@ static int samx5x_flash_erase(struct target_flash *f, target_addr addr,
 		SAMX5X_PAGE_SIZE;
 	lock_region_size = flash_size >> 5;
 
-	if (addr < (15 - bootprot) * 8192)
-		return -1;
+	if (addr < (15 - bootprot) * 8192) {
+            DEBUG_WARN("Bootprot\n");
+            return -1;
+        }
 
-	if (~runlock & (1 << addr / lock_region_size))
-		return -1;
+	if (~runlock & (1 << addr / lock_region_size)) {
+            DEBUG_WARN("runlock\n");
+            return -1;
+        }
 
 	while (len) {
 		target_mem_write32(t, SAMX5X_NVMC_ADDRESS, addr);
@@ -572,11 +565,15 @@ static int samx5x_flash_erase(struct target_flash *f, target_addr addr,
 		/* Poll for NVM Ready */
 		while ((target_mem_read32(t, SAMX5X_NVMC_STATUS) &
 			SAMX5X_STATUS_READY) == 0)
-			if (target_check_error(t) || samx5x_check_nvm_error(t))
-				return -1;
+                    if (target_check_error(t) || samx5x_check_nvm_error(t)) {
+                        DEBUG_WARN("NVM Ready\n");
+                        return -1;
+                    }
 
-		if (target_check_error(t) || samx5x_check_nvm_error(t))
-			return -1;
+		if (target_check_error(t) || samx5x_check_nvm_error(t)) {
+                    DEBUG_WARN("Error\n");
+                    return -1;
+                }
 
 		/* Lock */
 		samx5x_lock_current_address(t);
@@ -598,7 +595,7 @@ static int samx5x_flash_write(struct target_flash *f,
 	bool error = false;
 	uint16_t errs = samx5x_read_nvm_error(t);
 	if (errs) {
-		DEBUG(NVM_ERROR_BITS_MSG, "write", dest, len);
+		DEBUG_INFO(NVM_ERROR_BITS_MSG, "write", dest, len);
 		samx5x_print_nvm_error(errs);
 		samx5x_clear_nvm_error(t);
 	}
@@ -623,9 +620,8 @@ static int samx5x_flash_write(struct target_flash *f,
 		}
 
 	if (error || target_check_error(t) || samx5x_check_nvm_error(t)) {
-		DEBUG("Error writing flash page at 0x%08"PRIx32
-		      " (len 0x%08zx)\n",
-		      dest, len);
+		DEBUG_WARN("Error writing flash page at 0x%08"PRIx32
+		      " (len 0x%08zx)\n",  dest, len);
 		return -1;
 	}
 
@@ -642,9 +638,9 @@ static int samx5x_write_user_page(target *t, uint8_t *buffer)
 {
 	uint16_t errs = samx5x_read_nvm_error(t);
 	if (errs) {
-		DEBUG(NVM_ERROR_BITS_MSG, "erase and write",
-		      (uint32_t)SAMX5X_NVM_USER_PAGE,
-		      (size_t)SAMX5X_PAGE_SIZE);
+		DEBUG_INFO(NVM_ERROR_BITS_MSG, "erase and write",
+				   (uint32_t)SAMX5X_NVM_USER_PAGE,
+				   (size_t)SAMX5X_PAGE_SIZE);
 		samx5x_print_nvm_error(errs);
 		samx5x_clear_nvm_error(t);
 	}
@@ -711,13 +707,13 @@ static int samx5x_update_user_word(target *t, uint32_t addr, uint32_t value,
 		*value_written = new_word;
 
 	if (new_word != current_word) {
-		DEBUG("Writing user page word 0x%08"PRIx32
-		      " at offset 0x%03"PRIx32"\n", new_word, addr);
+		DEBUG_INFO("Writing user page word 0x%08"PRIx32
+				   " at offset 0x%03"PRIx32"\n", new_word, addr);
 		memcpy(buffer + addr, &new_word, 4);
 		return samx5x_write_user_page(t, buffer);
 	}
 	else {
-		DEBUG("Skipping user page write as no change would be made");
+		DEBUG_INFO("Skipping user page write as no change would be made");
 	}
 
 	return 0;
@@ -966,8 +962,8 @@ static bool samx5x_cmd_mbist(target *t, int argc, const char **argv)
 	(void)argc;
 	(void)argv;
 
-	DEBUG("Running MBIST for memory range 0x%08x-%08"PRIx32"\n",
-	      SAMX5X_RAM_START, samx5x_ram_size(t));
+	DEBUG_INFO("Running MBIST for memory range 0x%08x-%08"PRIx32"\n",
+			   SAMX5X_RAM_START, samx5x_ram_size(t));
 
 	/* Write the memory parameters to the DSU
 	 * Note that the two least significant bits of the address are
@@ -1038,8 +1034,8 @@ static bool samx5x_cmd_write8(target *t, int argc, const char **argv)
 		return false;
 	}
 
-	DEBUG("Writing 8-bit value 0x%02"PRIx32" at address 0x%08"PRIx32"\n",
-	      value, addr);
+	DEBUG_INFO("Writing 8-bit value 0x%02"PRIx32" at address 0x%08"PRIx32"\n",
+			   value, addr);
 	target_mem_write8(t, addr, (uint8_t)value);
 
 	return true;
@@ -1070,8 +1066,8 @@ static bool samx5x_cmd_write16(target *t, int argc, const char **argv)
 		return false;
 	}
 
-	DEBUG("Writing 16-bit value 0x%04"PRIx32" at address 0x%08"PRIx32"\n",
-	      value, addr);
+	DEBUG_INFO("Writing 16-bit value 0x%04"PRIx32" at address 0x%08"PRIx32"\n",
+			   value, addr);
 	target_mem_write16(t, addr, (uint16_t)value);
 
 	return true;
@@ -1097,8 +1093,8 @@ static bool samx5x_cmd_write32(target *t, int argc, const char **argv)
 		return false;
 	}
 
-	DEBUG("Writing 32-bit value 0x%08"PRIx32" at address 0x%08"PRIx32"\n",
-	      value, addr);
+	DEBUG_INFO("Writing 32-bit value 0x%08"PRIx32" at address 0x%08"PRIx32"\n",
+			   value, addr);
 	target_mem_write32(t, addr, value);
 
 	return true;

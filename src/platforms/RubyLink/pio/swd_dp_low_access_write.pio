@@ -1,0 +1,54 @@
+.program swd_dp_low_access_write
+.side_set 1 opt
+
+.wrap_target
+
+pull
+set x, 7
+
+req_loop:
+    out pins, 1 side 0
+    jmp x-- req_loop side 1
+
+set pins, 0 side 0
+out pindirs, 1 side 1
+set x, 2
+
+ack_loop:
+    in pins, 1 side 0
+    jmp x-- ack_loop side 1
+
+set pins, 1 side 0
+set x, 1 side 1
+mov OSR, x
+out pindirs, 1
+
+set x, 4
+mov y, ISR
+
+jmp x!=y ack_not_ok
+
+pull
+set x, 31
+
+data_loop:
+    out pins, 1 side 0
+    jmp x-- data_loop side 1
+
+pull
+set x, 8
+parity_loop:
+    out pins, 1 side 0
+    jmp x-- parity_loop side 1
+
+push noblock side 1
+jmp write_done
+
+ack_not_ok:
+    pull
+    pull
+    push noblock
+
+write_done:
+     nop
+    .wrap

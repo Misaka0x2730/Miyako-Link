@@ -32,9 +32,6 @@
 #define IAP_ENTRYPOINT				0x1FFF1FF1
 #define IAP_RAM_BASE				0x10000000
 
-#define ARM_CPUID					0xE000ED00
-#define CORTEX_M3_CPUID				0x412FC230	// Cortex-M3 r2p0
-#define CORTEX_M3_CPUID_MASK		0xFF00FFF0
 #define MEMMAP						0x400FC040
 #define LPC17xx_JTAG_IDCODE			0x4BA00477
 #define LPC17xx_SWDP_IDCODE			0x2BA01477
@@ -57,7 +54,7 @@ const struct command_s lpc17xx_cmd_list[] = {
 	{NULL, NULL, NULL}
 };
 
-void lpc17xx_add_flash(target *t, uint32_t addr, size_t len, size_t erasesize, unsigned int base_sector)
+static void lpc17xx_add_flash(target *t, uint32_t addr, size_t len, size_t erasesize, unsigned int base_sector)
 {
 	struct lpc_flash *lf = lpc_add_flash(t, addr, len);
 	lf->f.blocksize = erasesize;
@@ -82,8 +79,7 @@ lpc17xx_probe(target *t)
 		return false;
 	}
 
-	uint32_t cpuid = target_mem_read32(t, ARM_CPUID);
-	if (((cpuid & CORTEX_M3_CPUID_MASK) == (CORTEX_M3_CPUID & CORTEX_M3_CPUID_MASK))) {
+	if ((t->cpuid & CPUID_PARTNO_MASK) == CORTEX_M3)  {
 		/*
 		 * Now that we're sure it's a Cortex-M3, we need to halt the
 		 * target and make an IAP call to get the part number.
@@ -138,17 +134,20 @@ lpc17xx_cmd_erase(target *t, int argc, const char *argv[])
 	struct flash_param param;
 
 	if (lpc17xx_iap_call(t, &param, IAP_CMD_PREPARE, 0, FLASH_NUM_SECTOR-1)) {
-		DEBUG("lpc17xx_cmd_erase: prepare failed %d\n", (unsigned int)param.result[0]);
+		DEBUG_WARN("lpc17xx_cmd_erase: prepare failed %d\n",
+				   (unsigned int)param.result[0]);
 		return false;
 	}
 
 	if (lpc17xx_iap_call(t, &param, IAP_CMD_ERASE, 0, FLASH_NUM_SECTOR-1, CPU_CLK_KHZ)) {
-		DEBUG("lpc17xx_cmd_erase: erase failed %d\n", (unsigned int)param.result[0]);
+		DEBUG_WARN("lpc17xx_cmd_erase: erase failed %d\n",
+				   (unsigned int)param.result[0]);
 		return false;
 	}
 
 	if (lpc17xx_iap_call(t, &param, IAP_CMD_BLANKCHECK, 0, FLASH_NUM_SECTOR-1)) {
-		DEBUG("lpc17xx_cmd_erase: blankcheck failed %d\n", (unsigned int)param.result[0]);
+		DEBUG_WARN("lpc17xx_cmd_erase: blankcheck failed %d\n",
+				   (unsigned int)param.result[0]);
 		return false;
 	}
 	tc_printf(t, "Erase OK.\n");

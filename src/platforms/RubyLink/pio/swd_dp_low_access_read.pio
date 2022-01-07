@@ -1,0 +1,44 @@
+.program swd_dp_low_access_read
+.side_set 1 opt
+                ; SWDIO is set as OUT and IN pin
+                ; SWDIO_DIR is set as SET pin
+                ; SWCLK is set as side-set pin
+
+pull            ; Pull acknowledgment value from TX FIFO
+mov y, OSR      ; Save acknowledgment value in scratch Y register
+
+set x, 7        ; Set byte counter to 8 (8 - 1 = 7)
+
+                ; Target sets data on SWDIO and read data from SWDIO on the rising edge of SWCLK
+                ; Host sets data on SWDIO and read data from SWDIO on the falling edge of SWCLK
+req_loop:
+    out pins, 1 side 0        ; Write bit value to SWDIO and set falling edge on SWCLK (autopull is enabled, so request will be pulled from TX FIFO at first OUT)
+    jmp x-- req_loop side 1   ; Decrement counter and set rising edge on SWCLK
+
+set pins, 0 side 0            ; Change SWDIO external buffer direction from output to input (SWDIO_DIR 1 -> 0) and perform turnaround
+out pindirs, 1 side 1         ; Change SWDIO pin direction to input (9th bit in packet)
+set x, 2                      ; Next 3 bytes (3 - 1 = 2) are ACK, WAIT or FAULT
+
+ack_loop:
+    in pins, 1 side 0         ; Read bit value from SWDIO and set falling edge on SWCLK
+    jmp x-- ack_loop side 1   ; Decrement counter and set rising edge on SWCLK
+
+mov x, ISR  ; Read ISR contents to scratch X register
+push        ; Push acknowledgment to RX FIFO
+
+jmp x!=y read_done  ; Compare X and Y registers, if data from target are not ACK - go to the end
+
+set x, 31           ; Next 32 bytes (32 - 1 = 31) is data from target
+
+data_loop:
+    in pins, 1 side 0           ; Read bit value from SWDIO and set falling edge on SWCLK
+                                ; autopush is enabled, so data will be pushed to RX FIFO at the last IN)
+    jmp x-- data_loop side 1    ; Decrement counter and set rising edge on SWCLK
+
+in pins, 1 side 0               ; Read parity bit value from SWDIO
+push side 1                     ; Push parity value to RX FIFO and perform turnaround
+
+read_done:
+     set pins, 0 side 0         ; Set falling edge on SWCLK
+     out pindirs, 1 side 1      ; Set rising edge on SWCLK
+     out pins, 1 side 1         ; Set falling edge on SWCLK

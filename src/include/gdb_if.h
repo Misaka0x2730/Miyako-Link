@@ -21,11 +21,6 @@
 #ifndef __GDB_IF_H
 #define __GDB_IF_H
 
-#if !defined(NO_LIBOPENCM3)
-#include <libopencm3/usb/usbd.h>
-void gdb_usb_out_cb(usbd_device *dev, uint8_t ep);
-#endif
-
 void cdc_acm_init(void);
 void cdc_thread_init(void);
 void cdc_acm_start(void);

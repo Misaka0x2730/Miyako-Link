@@ -21,12 +21,11 @@
 #ifndef __MORSE_H
 #define __MORSE_H
 
-extern const char *morse_msg;
-
-void morse(int number, const char *msg, char repeat);
-bool morse_update(int number);
-
-#define MORSE_PERIOD	(100)
+void morse_lock(void);
+void morse_unlock(void);
+char* get_morse_msg(void);
+void morse(char *msg, char repeat);
+bool morse_update(void);
 
 #endif
 

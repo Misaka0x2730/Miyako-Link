@@ -214,7 +214,7 @@ static uint32_t va_to_pa(target *t, uint32_t va)
 	if (par & 1)
 		priv->mmu_fault = true;
 	uint32_t pa = (par & ~0xfff) | (va & 0xfff);
-	DEBUG("%s: VA = 0x%08"PRIx32", PAR = 0x%08"PRIx32", PA = 0x%08"PRIX32"\n",
+	DEBUG_INFO("%s: VA = 0x%08"PRIx32", PAR = 0x%08"PRIx32", PA = 0x%08"PRIX32"\n",
               __func__, va, par, pa);
 	return pa;
 }
@@ -325,15 +325,15 @@ bool cortexa_probe(ADIv5_AP_t *apb, uint32_t debug_base)
 {
 	target *t;
 
-	t = target_new();
+	t = target_new(&(apb->dp->tc->target_list));
 	if (!t) {
 		return false;
 	}
 
 	adiv5_ap_ref(apb);
-	struct cortexa_priv *priv = calloc(1, sizeof(*priv));
-	if (!priv) {			/* calloc failed: heap exhaustion */
-		DEBUG("calloc: failed in %s\n", __func__);
+	struct cortexa_priv *priv = MemManager_Alloc(sizeof(*priv));
+	if (!priv) {			/* MemManager_Alloc failed: heap exhaustion */
+		DEBUG_WARN("MemManager_Alloc: failed in %s\n", __func__);
 		return false;
 	}
 
@@ -354,6 +354,7 @@ bool cortexa_probe(ADIv5_AP_t *apb, uint32_t debug_base)
 
 	t->driver = cortexa_driver_str;
 
+    t->tc = apb->dp->tc;
 	t->attach = cortexa_attach;
 	t->detach = cortexa_detach;
 
@@ -388,7 +389,7 @@ bool cortexa_attach(target *t)
 	dbgdscr |= DBGDSCR_HDBGEN | DBGDSCR_ITREN;
 	dbgdscr = (dbgdscr & ~DBGDSCR_EXTDCCMODE_MASK) | DBGDSCR_EXTDCCMODE_STALL;
 	apb_write(t, DBGDSCR, dbgdscr);
-	DEBUG("DBGDSCR = 0x%08"PRIx32"\n", dbgdscr);
+	DEBUG_INFO("DBGDSCR = 0x%08"PRIx32"\n", dbgdscr);
 
 	target_halt_request(t);
 	tries = 10;
@@ -620,7 +621,7 @@ static enum target_halt_reason cortexa_halt_poll(target *t, target_addr *watch)
 	switch (e.type) {
 	case EXCEPTION_ERROR:
 		/* Oh crap, there's no recovery from this... */
-		target_list_free();
+		target_list_free(&(t->tc->target_list));
 		return TARGET_HALT_ERROR;
 	case EXCEPTION_TIMEOUT:
 		/* Timeout isn't a problem, target could be in WFI */
@@ -630,7 +631,7 @@ static enum target_halt_reason cortexa_halt_poll(target *t, target_addr *watch)
 	if (!(dbgdscr & DBGDSCR_HALTED)) /* Not halted */
 		return TARGET_HALT_RUNNING;
 
-	DEBUG("%s: DBGDSCR = 0x%08"PRIx32"\n", __func__, dbgdscr);
+	DEBUG_INFO("%s: DBGDSCR = 0x%08"PRIx32"\n", __func__, dbgdscr);
 	/* Reenable DBGITR */
 	dbgdscr |= DBGDSCR_ITREN;
 	apb_write(t, DBGDSCR, dbgdscr);
@@ -657,7 +658,7 @@ void cortexa_halt_resume(target *t, bool step)
 	if (step) {
 		uint32_t addr = priv->reg_cache.r[15];
 		uint32_t bas = bp_bas(addr, (priv->reg_cache.cpsr & CPSR_THUMB) ? 2 : 4);
-		DEBUG("step 0x%08"PRIx32"  %"PRIx32"\n", addr, bas);
+		DEBUG_INFO("step 0x%08"PRIx32"  %"PRIx32"\n", addr, bas);
 		/* Set match any breakpoint */
 		apb_write(t, DBGBVR(0), priv->reg_cache.r[15] & ~3);
 		apb_write(t, DBGBCR(0), DBGBCR_INST_MISMATCH | bas |
@@ -693,7 +694,7 @@ void cortexa_halt_resume(target *t, bool step)
 	do {
 		apb_write(t, DBGDRCR, DBGDRCR_CSE | DBGDRCR_RRQ);
 		dbgdscr = apb_read(t, DBGDSCR);
-		DEBUG("%s: DBGDSCR = 0x%08"PRIx32"\n", __func__, dbgdscr);
+		DEBUG_INFO("%s: DBGDSCR = 0x%08"PRIx32"\n", __func__, dbgdscr);
 	} while (!(dbgdscr & DBGDSCR_RESTARTED) &&
 	         !platform_timeout_is_expired(&to));
 }

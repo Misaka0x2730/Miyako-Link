@@ -24,15 +24,15 @@ MAKEFLAGS += --no-print-dir
 Q := @
 endif
 
-INCLUDES += -I$(CURDIR)/include -I$(CURDIR)/platforms/common -I$(PLATFORM_DIR) -I$(CURDIR)/target
+INCLUDES += -I$(CURDIR)/include -I$(CURDIR)/platforms/common -I$(PLATFORM_DIR) -I$(PLATFORM_DIR)/include -I$(CURDIR)/target
 
-CFLAGS += -DNO_LIBOPENCM3
+CFLAGS += -DNO_LIBOPENCM3 -std=gnu11
 
 ifeq ($(ENABLE_DEBUG), 1)
 CFLAGS += -DENABLE_DEBUG
 endif
 
-SRC =			\
+SRC +=			\
 	adiv5.c		\
 	adiv5_jtagdp.c	\
 	adiv5_swdp.c	\
@@ -75,30 +75,6 @@ SRC =			\
 	jtagtap.c   \
 	swdptap.c   \
     remote.c    \
-
-TINYUSB_DIR := $(CURDIR)/../pico-sdk/lib/tinyusb
-BOARD_PATH := $(PLATFORM_DIR)
-FAMILY := rp2040
-
-INCLUDES += -I$(TINYUSB_DIR)/hw -I$(TINYUSB_DIR)/src -I$(TINYUSB_DIR)/hw/bsp/rp2040
-
-SRC += \
-	$(TINYUSB_DIR)/hw/bsp/board.c \
-	$(TINYUSB_DIR)/hw/bsp/rp2040/family.c \
-	$(TINYUSB_DIR)/src/tusb.c \
-	$(TINYUSB_DIR)/src/common/tusb_fifo.c \
-	$(TINYUSB_DIR)/src/device/usbd.c \
-	$(TINYUSB_DIR)/src/device/usbd_control.c \
-	$(TINYUSB_DIR)/src/class/audio/audio_device.c \
-	$(TINYUSB_DIR)/src/class/cdc/cdc_device.c \
-	$(TINYUSB_DIR)/src/class/dfu/dfu_device.c \
-	$(TINYUSB_DIR)/src/class/dfu/dfu_rt_device.c \
-	$(TINYUSB_DIR)/src/class/hid/hid_device.c \
-	$(TINYUSB_DIR)/src/class/midi/midi_device.c \
-	$(TINYUSB_DIR)/src/class/msc/msc_device.c \
-	$(TINYUSB_DIR)/src/class/net/net_device.c \
-	$(TINYUSB_DIR)/src/class/usbtmc/usbtmc_device.c \
-	$(TINYUSB_DIR)/src/class/vendor/vendor_device.c
 
 ifndef TARGET
 TARGET=blackmagic

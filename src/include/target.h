@@ -29,18 +29,21 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <sys/types.h>
+#include "jtagtap.h"
 
 typedef struct target_s target;
 typedef uint32_t target_addr;
 struct target_controller;
 
-target *get_target_list(void);
+#if PC_HOSTED == 1
+int platform_adiv5_swdp_scan(uint32_t targetid);
+int platform_jtag_scan(const uint8_t *lrlens);
+#endif
+int adiv5_swdp_scan(struct target_controller *tc, uint32_t targetid);
+int jtag_scan(jtag_proc_t* jtag_proc, const uint8_t *lrlens);
 
-int adiv5_swdp_scan(void);
-int jtag_scan(const uint8_t *lrlens);
-
-bool target_foreach(void (*cb)(int i, target *t, void *context), void *context);
-void target_list_free(void);
+int target_foreach(target *target_list, void (*cb)(int i, target *t, void *context), void *context);
+void target_list_free(target **tl);
 
 /* Attach/detach functions */
 target *target_attach(target *t, struct target_controller *);
@@ -49,6 +52,8 @@ void target_detach(target *t);
 bool target_attached(target *t);
 const char *target_driver_name(target *t);
 const char *target_core_name(target *t);
+unsigned int target_designer(target *t);
+unsigned int target_idcode(target *t);
 
 /* Memory access functions */
 bool target_mem_map(target *t, char *buf, size_t len);
@@ -82,6 +87,9 @@ void target_reset(target *t);
 void target_halt_request(target *t);
 enum target_halt_reason target_halt_poll(target *t, target_addr *watch);
 void target_halt_resume(target *t, bool step);
+void target_set_cmdline(target *t, char *cmdline);
+void target_set_heapinfo(target *t, target_addr heap_base, target_addr heap_limit,
+	target_addr stack_base, target_addr stack_limit);
 
 /* Break-/watchpoint functions */
 enum target_breakwatch {
@@ -98,17 +106,12 @@ int target_breakwatch_clear(target *t, enum target_breakwatch, target_addr, size
 void target_command_help(target *t);
 int target_command(target *t, int argc, const char *argv[]);
 
-uint8_t target_get_flash_mode(target *t);
-void target_set_flash_mode(target *t, uint8_t flash_mode);
-long target_get_wait_timeout(target *t);
-void target_set_wait_timeout(target *t, long wait_timeout);
-long target_get_connect_srst(target *t);
-void target_set_connect_srst(target *t, bool connect_assert_srst);
-
+/* keep target_errno in sync with errno values in gdb/include/gdb/fileio.h */
 enum target_errno {
 	TARGET_EPERM = 1,
 	TARGET_ENOENT = 2,
 	TARGET_EINTR = 4,
+	TARGET_EIO = 5,
 	TARGET_EBADF = 9,
 	TARGET_EACCES = 13,
 	TARGET_EFAULT = 14,
@@ -118,13 +121,15 @@ enum target_errno {
 	TARGET_ENOTDIR = 20,
 	TARGET_EISDIR = 21,
 	TARGET_EINVAL = 22,
-	TARGET_EMFILE = 24,
 	TARGET_ENFILE = 23,
+	TARGET_EMFILE = 24,
 	TARGET_EFBIG = 27,
 	TARGET_ENOSPC = 28,
 	TARGET_ESPIPE = 29,
 	TARGET_EROFS = 30,
-	TARGET_ENAMETOOLONG = 36,
+	TARGET_ENOSYS = 88,
+	TARGET_ENAMETOOLONG = 91,
+	TARGET_EUNKNOWN = 9999,
 };
 
 enum target_open_flags {
@@ -172,7 +177,24 @@ struct target_controller {
 	              target_addr cmd, size_t cmd_len);
 	enum target_errno errno_;
 	bool interrupted;
+
+    uint8_t running_status;
+    target *cur_target;
+    target *last_target;
+	target *target_list;
+    uint8_t flash_mode;
+
+    bool connect_assert_srst;
+    unsigned cortexm_wait_timeout; /* Timeout to wait for Cortex to react on halt command. */
+
+    uint32_t target_interface_number;
+    int32_t (*platform_get_voltage)(uint32_t interface);
+    void (*platform_srst_set_val)(bool assert);
+
+    struct jtag_proc_s jtag_proc;
 };
+
+typedef struct target_controller target_controller_t;
 
 #endif
 

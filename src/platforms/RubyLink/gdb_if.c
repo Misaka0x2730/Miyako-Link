@@ -25,38 +25,8 @@
 #include "general.h"
 #include "gdb_if.h"
 
-#include "isrpipe.h"
-#include "isrpipe/read_timeout.h"
-#include "mutex.h"
-
-static mutex_t usbus_mutex;
-
 typedef struct {
-	isrpipe_t isrpipe;
 }gdb_cdc_acm_t;
-
-void gdb_if_putchar(unsigned char c, int flush)
-{
-}
-
-unsigned char gdb_if_getchar(void)
-{
-	uint8_t data = 0;
-	return data;
-}
-
-unsigned char gdb_if_getchar_to(int timeout)
-{
-	platform_timeout t;
-	platform_timeout_set(&t, timeout);
-	uint8_t data = 0;
-	int res = -1;
-
-	if(res < 0)
-		return -1;
-	else
-		return data;
-}
 
 void cdc_acm_init(void)
 {
@@ -68,7 +38,5 @@ void cdc_acm_start(void)
 
 void cdc_thread_init(void)
 {
-	mutex_lock(&usbus_mutex);
-    mutex_unlock(&usbus_mutex);
 }
 

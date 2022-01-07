@@ -21,34 +21,14 @@
 #ifndef __JTAG_SCAN_H
 #define __JTAG_SCAN_H
 
-#define JTAG_MAX_DEVS	32
-#define JTAG_MAX_IR_LEN	16
+#include <jtagtap.h>
+#include "jtag_dev.h"
 
-typedef struct jtag_dev_s {
-#if !defined(JTAG_HL)
-	union {
-		uint8_t dev;
-		uint8_t dr_prescan;
-	};
-	uint8_t dr_postscan;
+struct ADIv5_DP_s;
+struct ADIv5_AP_s;
 
-	uint8_t ir_len;
-	uint8_t ir_prescan;
-	uint8_t ir_postscan;
-#endif
-	uint32_t idcode;
-	const char *descr;
-#if !defined(JTAG_HL)
-	uint32_t current_ir;
-#endif
-
-} jtag_dev_t;
-
-//extern struct jtag_dev_s jtag_devs[JTAG_MAX_DEVS+1];
-//extern int jtag_dev_count;
-
-void jtag_dev_write_ir(jtag_dev_t *dev, uint32_t ir);
-void jtag_dev_shift_dr(jtag_dev_t *dev, uint8_t *dout, const uint8_t *din, int ticks);
-
+void jtag_dev_write_ir(jtag_proc_t *jp, uint8_t jd_index, uint32_t ir);
+void jtag_dev_shift_dr(jtag_proc_t *jp, uint8_t jd_index, uint8_t *dout, const uint8_t *din, int ticks);
+void jtag_add_device(const int dev_index, const jtag_dev_t *jtag_dev);
 #endif
 

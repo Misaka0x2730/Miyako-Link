@@ -22,46 +22,36 @@
 
 /* Morse code patterns and lengths */
 static const struct {
-	uint16_t code;
-	uint8_t bits;
+    uint16_t code;
+    uint8_t bits;
 } morse_letter[] = {
-	{        0b00011101,  8}, // 'A' .-
-	{    0b000101010111, 12}, // 'B' -...
-	{  0b00010111010111, 14}, // 'C' -.-.
-	{      0b0001010111, 10}, // 'D' -..
-	{            0b0001,  4}, // 'E' .
-	{    0b000101110101, 12}, // 'F' ..-.
-	{    0b000101110111, 12}, // 'G' --.
-	{      0b0001010101, 10}, // 'H' ....
-	{          0b000101,  6}, // 'I' ..
-	{0b0001110111011101, 16}, // 'J' .---
-	{    0b000111010111, 12}, // 'K' -.-
-	{    0b000101011101, 12}, // 'L' .-..
-	{      0b0001110111, 10}, // 'M' --
-	{        0b00010111,  8}, // 'N' -.
-	{  0b00011101110111, 14}, // 'O' ---
-	{  0b00010111011101, 14}, // 'P' .--.
-	{0b0001110101110111, 16}, // 'Q' --.-
-	{      0b0001011101, 10}, // 'R' .-.
-	{        0b00010101,  8}, // 'S' ...
-	{          0b000111,  6}, // 'T' -
-	{      0b0001110101, 10}, // 'U' ..-
-	{    0b000111010101, 12}, // 'V' ...-
-	{    0b000111011101, 12}, // 'W' .--
-	{  0b00011101010111, 14}, // 'X' -..-
-	{0b0001110111010111, 16}, // 'Y' -.--
-	{  0b00010101110111, 14}, // 'Z' --..
+        {        0b00011101,  8}, // 'A' .-
+        {    0b000101010111, 12}, // 'B' -...
+        {  0b00010111010111, 14}, // 'C' -.-.
+        {      0b0001010111, 10}, // 'D' -..
+        {            0b0001,  4}, // 'E' .
+        {    0b000101110101, 12}, // 'F' ..-.
+        {    0b000101110111, 12}, // 'G' --.
+        {      0b0001010101, 10}, // 'H' ....
+        {          0b000101,  6}, // 'I' ..
+        {0b0001110111011101, 16}, // 'J' .---
+        {    0b000111010111, 12}, // 'K' -.-
+        {    0b000101011101, 12}, // 'L' .-..
+        {      0b0001110111, 10}, // 'M' --
+        {        0b00010111,  8}, // 'N' -.
+        {  0b00011101110111, 14}, // 'O' ---
+        {  0b00010111011101, 14}, // 'P' .--.
+        {0b0001110101110111, 16}, // 'Q' --.-
+        {      0b0001011101, 10}, // 'R' .-.
+        {        0b00010101,  8}, // 'S' ...
+        {          0b000111,  6}, // 'T' -
+        {      0b0001110101, 10}, // 'U' ..-
+        {    0b000111010101, 12}, // 'V' ...-
+        {    0b000111011101, 12}, // 'W' .--
+        {  0b00011101010111, 14}, // 'X' -..-
+        {0b0001110111010111, 16}, // 'Y' -.--
+        {  0b00010101110111, 14}, // 'Z' --..
 };
-
-/*const char *morse_msg;
-static const char * volatile morse_ptr;
-static char morse_repeat;
-
-DEF_THREAD_RESOURCE(char*, morse_msg);
-DEF_THREAD_RESOURCE(char*, morse_ptr);
-DEF_THREAD_RESOURCE(char, morse_repeat);
-DEF_THREAD_RESOURCE(uint16_t, morse_code);
-DEF_THREAD_RESOURCE(uint8_t, morse_bits);*/
 
 static char* morse_msg_list[MAX_GDB_NUMBER] = {NULL};
 static char* morse_ptr_list[MAX_GDB_NUMBER] = {NULL};
@@ -70,74 +60,99 @@ static uint16_t morse_code_list[MAX_GDB_NUMBER] = {0};
 static uint8_t morse_bits_list[MAX_GDB_NUMBER] = {0};
 static mutex_t morse_mutex[MAX_GDB_NUMBER] = {0};
 
-void morse(int number, const char *msg, char repeat)
+void morse_lock(void)
 {
-	if(number == -1)
-		return;
-
-	mutex_lock(&morse_mutex[number]);
-	morse_msg_list[number] = msg;
-	morse_ptr_list[number] = msg;
-	morse_repeat_list[number] = repeat;
-	mutex_unlock(&morse_mutex[number]);
-
-	/*set_morse_msg(msg);
-	set_morse_ptr(msg);
-	set_morse_repeat(repeat);*/
+    const int number = get_interface_number();
+    mutex_lock(&morse_mutex[number]);
 }
 
-bool morse_update(int number)
+void morse_unlock(void)
 {
-	if(number == -1)
-		return false;
+    const int number = get_interface_number();
+    mutex_unlock(&morse_mutex[number]);
+}
 
-	mutex_lock(&morse_mutex[number]);
+char* get_morse_msg(void)
+{
+    char *msg = NULL;
+    const int number = get_interface_number();
 
-	uint16_t code = morse_code_list[number];
-	uint8_t bits = morse_bits_list[number];
-	char *morse_ptr = morse_ptr_list[number];
-	char *morse_msg = morse_msg_list[number];
+    mutex_lock(&morse_mutex[number]);
+    msg = morse_msg_list[number];
+    mutex_unlock(&morse_mutex[number]);
 
-	if (!morse_ptr_list[number]) {
-		mutex_unlock(&morse_mutex[number]);
-		return false;
-	}
+    return msg;
+}
 
-	if (!bits) {
-		char c = *morse_ptr_list[number]++;
-		//morse_ptr_list[number]++;
-		//set_morse_ptr(morse_ptr+1);
-		if (!c) {
-			if(morse_repeat_list[number]) {
-				morse_ptr_list[number] = morse_msg_list[number];
-				//set_morse_ptr(morse_msg+1);
-				c = *morse_ptr_list[number]++;
-			} else {
-				//set_morse_ptr(NULL);
-				morse_ptr_list[number] = NULL;
-				mutex_unlock(&morse_mutex[number]);
-				return false;
-			}
-		}
-		if ((c >= 'A') && (c <= 'Z')) {
-			c -= 'A';
-			code = morse_letter[c].code;
-			bits = morse_letter[c].bits;
-		} else {
-			code = 0;
-			bits = 4;
-		}
-	}
+void morse(char *msg, char repeat)
+{
+    const int number = get_interface_number();
 
-	bool ret = code & 1;
-	code >>= 1;
-	bits--;
+    mutex_lock(&morse_mutex[number]);
+    morse_msg_list[number] = msg;
+    morse_ptr_list[number] = msg;
+    morse_repeat_list[number] = repeat;
+    mutex_unlock(&morse_mutex[number]);
+}
 
-	morse_code_list[number] = code;
-	morse_bits_list[number] = bits;
-	//set_morse_code(code);
-	//set_morse_bits(bits);
-	mutex_unlock(&morse_mutex[number]);
-	return ret;
+bool morse_update(void)
+{
+    const int number = get_interface_number();
+    if(number == -1)
+    {
+        return false;
+    }
+
+    mutex_lock(&morse_mutex[number]);
+
+    uint16_t code = morse_code_list[number];
+    uint8_t bits = morse_bits_list[number];
+    char *morse_ptr = morse_ptr_list[number];
+    char *morse_msg = morse_msg_list[number];
+
+    if (!morse_ptr_list[number])
+    {
+        mutex_unlock(&morse_mutex[number]);
+        return false;
+    }
+
+    if (!bits)
+    {
+        char c = *morse_ptr_list[number]++;
+        if (!c)
+        {
+            if(morse_repeat_list[number])
+            {
+                morse_ptr_list[number] = morse_msg_list[number];
+                c = *morse_ptr_list[number]++;
+            }
+            else
+            {
+                morse_ptr_list[number] = NULL;
+                mutex_unlock(&morse_mutex[number]);
+                return false;
+            }
+        }
+        if ((c >= 'A') && (c <= 'Z'))
+        {
+            c -= 'A';
+            code = morse_letter[c].code;
+            bits = morse_letter[c].bits;
+        }
+        else
+        {
+            code = 0;
+            bits = 4;
+        }
+    }
+
+    bool ret = code & 1;
+    code >>= 1;
+    bits--;
+
+    morse_code_list[number] = code;
+    morse_bits_list[number] = bits;
+    mutex_unlock(&morse_mutex[number]);
+    return ret;
 }
 

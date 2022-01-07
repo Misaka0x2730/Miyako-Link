@@ -28,40 +28,182 @@ enum {
 	SWDIO_STATUS_DRIVE
 };
 
-int swdptap_init(void)
+int swdptap_init(ADIv5_DP_t *dp)
 {
+    dp->seq_in  = swdptap_seq_in;
+    dp->seq_in_parity  = swdptap_seq_in_parity;
+    dp->seq_out = swdptap_seq_out;
+    dp->seq_out_parity  = swdptap_seq_out_parity;
+
 	return 0;
 }
 
-static void swdptap_turnaround(gpio_t *pin_list, int dir)
+static void swdptap_turnaround(int dir)
 {
-}
+    static int olddir = SWDIO_STATUS_FLOAT;
+    register volatile int32_t cnt;
 
-bool swdptap_bit_in(gpio_t *pin_list)
-{
-    return 0;
-}
+    /* Don't turnaround if direction not changing */
+    if(dir == olddir) return;
+    olddir = dir;
 
-void swdptap_bit_out(gpio_t *pin_list, bool val)
-{
+    uint32_t swd_delay_cnt = 1250;
+    if(dir == SWDIO_STATUS_FLOAT)
+        SWDIO_MODE_FLOAT();
+    gpio_put(SWCLK_PIN, 1);
+    busy_wait_us_32(10);
+    gpio_put(SWCLK_PIN, 0);
+    busy_wait_us_32(10);
+    if(dir == SWDIO_STATUS_DRIVE)
+        SWDIO_MODE_DRIVE();
 }
 
 uint32_t swdptap_seq_in(int ticks)
 {
-    return 0;
+    uint32_t index = 1;
+    uint32_t ret = 0;
+    int len = ticks;
+    register volatile int32_t cnt;
+
+    uint32_t swd_delay_cnt = 10;
+
+    swdptap_turnaround(SWDIO_STATUS_FLOAT);
+    if (swd_delay_cnt) {
+        while (len--) {
+            int res;
+            res = gpio_get(SWDIO_PIN);
+            gpio_put(SWCLK_PIN, 1);
+            busy_wait_us_32(swd_delay_cnt);
+            ret |= (res) ? index : 0;
+            index <<= 1;
+            gpio_put(SWCLK_PIN, 0);
+            busy_wait_us_32(swd_delay_cnt);
+        }
+    } else {
+        volatile int res;
+        while (len--) {
+            res = gpio_get(SWDIO_PIN);
+            gpio_put(SWCLK_PIN, 1);
+            ret |= (res) ? index : 0;
+            index <<= 1;
+            gpio_put(SWCLK_PIN, 0);
+        }
+    }
+#ifdef DEBUG_SWD_BITS
+    for (int i = 0; i < len; i++)
+		DEBUG("%d", (ret & (1 << i)) ? 1 : 0);
+#endif
+    return ret;
 }
 
 bool swdptap_seq_in_parity(uint32_t *ret, int ticks)
 {
-	uint8_t parity = 0;
+    uint32_t swd_delay_cnt = 10;
 
-	return parity;
+    uint32_t index = 1;
+    uint32_t res = 0;
+    bool bit;
+    int len = ticks;
+    register volatile int32_t cnt;
+
+    swdptap_turnaround(SWDIO_STATUS_FLOAT);
+    if (swd_delay_cnt) {
+        while (len--) {
+            bit = gpio_get(SWDIO_PIN);
+            gpio_put(SWCLK_PIN, 1);
+            busy_wait_us_32(swd_delay_cnt);
+            res |= (bit) ? index : 0;
+            index <<= 1;
+            gpio_put(SWCLK_PIN, 0);
+            busy_wait_us_32(swd_delay_cnt);
+        }
+    } else {
+        while (len--) {
+            bit = gpio_get(SWDIO_PIN);
+            gpio_put(SWCLK_PIN, 1);
+            res |= (bit) ? index : 0;
+            index <<= 1;
+            gpio_put(SWCLK_PIN, 0);
+        }
+    }
+    int parity = __builtin_popcount(res);
+    bit = gpio_get(SWDIO_PIN);
+    gpio_put(SWCLK_PIN, 1);
+    busy_wait_us_32(swd_delay_cnt);
+    parity += (bit) ? 1 : 0;
+    gpio_put(SWCLK_PIN, 0);
+    busy_wait_us_32(swd_delay_cnt);
+#ifdef DEBUG_SWD_BITS
+    for (int i = 0; i < len; i++)
+		DEBUG("%d", (res & (1 << i)) ? 1 : 0);
+#endif
+    *ret = res;
+    /* Terminate the read cycle now */
+    swdptap_turnaround(SWDIO_STATUS_DRIVE);
+    return (parity & 1);
 }
 
 void swdptap_seq_out(uint32_t MS, int ticks)
 {
+    uint32_t swd_delay_cnt = 10;
+#ifdef DEBUG_SWD_BITS
+    for (int i = 0; i < ticks; i++)
+		DEBUG("%d", (MS & (1 << i)) ? 1 : 0);
+#endif
+    register volatile int32_t cnt;
+    swdptap_turnaround(SWDIO_STATUS_DRIVE);
+    gpio_put(SWDIO_PIN, MS & 1);
+    if (swd_delay_cnt) {
+        while (ticks--) {
+            gpio_put(SWCLK_PIN, 1);
+            busy_wait_us_32(swd_delay_cnt);
+            MS >>= 1;
+            gpio_put(SWDIO_PIN, MS & 1);
+            gpio_put(SWCLK_PIN, 0);
+            busy_wait_us_32(swd_delay_cnt);
+        }
+    } else {
+        while (ticks--) {
+            gpio_put(SWCLK_PIN, 1);
+            MS >>= 1;
+            gpio_put(SWDIO_PIN, MS & 1);
+            gpio_put(SWCLK_PIN, 0);
+        }
+    }
 }
 
 void swdptap_seq_out_parity(uint32_t MS, int ticks)
 {
+    int parity = __builtin_popcount(MS);
+#ifdef DEBUG_SWD_BITS
+    for (int i = 0; i < ticks; i++)
+		DEBUG("%d", (MS & (1 << i)) ? 1 : 0);
+#endif
+    register volatile int32_t cnt;
+    uint32_t swd_delay_cnt = 10;
+    swdptap_turnaround(SWDIO_STATUS_DRIVE);
+    gpio_put(SWDIO_PIN, MS & 1);
+    MS >>= 1;
+    if (swd_delay_cnt) {
+        while (ticks--) {
+            gpio_put(SWCLK_PIN, 1);
+            busy_wait_us_32(swd_delay_cnt);
+            gpio_put(SWDIO_PIN, MS & 1);
+            MS >>= 1;
+            gpio_put(SWCLK_PIN, 0);
+            busy_wait_us_32(swd_delay_cnt);
+        }
+    } else {
+        while (ticks--) {
+            gpio_put(SWCLK_PIN, 1);
+            gpio_put(SWDIO_PIN, MS & 1);
+            MS >>= 1;
+            gpio_put(SWCLK_PIN, 0);
+        }
+    }
+    gpio_put(SWDIO_PIN, parity & 1);
+    gpio_put(SWCLK_PIN, 1);
+    busy_wait_us_32(swd_delay_cnt);
+    gpio_put(SWCLK_PIN, 0);
+    busy_wait_us_32(swd_delay_cnt);
 }

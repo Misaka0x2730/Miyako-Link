@@ -26,6 +26,8 @@
 #include "jtagtap.h"
 #include "gdb_packet.h"
 
+jtag_proc_t jtag_proc;
+
 int jtagtap_init(void)
 {
 	return 0;

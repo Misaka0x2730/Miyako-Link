@@ -113,10 +113,8 @@ const struct command_s samd_cmd_list[] = {
 #define SAMD_DSU_ADDRESS		(SAMD_DSU_EXT_ACCESS + 0x4)
 #define SAMD_DSU_LENGTH			(SAMD_DSU_EXT_ACCESS + 0x8)
 #define SAMD_DSU_DID			(SAMD_DSU_EXT_ACCESS + 0x018)
-#define SAMD_DSU_PID(n)			(SAMD_DSU + 0x1FE0 + \
-					 (0x4 * (n % 4)) - (0x10 * (n / 4)))
-#define SAMD_DSU_CID(n)			(SAMD_DSU + 0x1FF0 + \
-					 (0x4 * (n % 4)))
+#define SAMD_DSU_PID			(SAMD_DSU + 0x1000)
+#define SAMD_DSU_CID			(SAMD_DSU + 0x1010)
 
 /* Control and Status Register (CTRLSTAT) */
 #define SAMD_CTRL_CHIP_ERASE		(1 << 4)
@@ -222,35 +220,6 @@ static const struct samd_part samd_l22_parts[] = {
 };
 
 /**
- * Reads the SAM D20 Peripheral ID
- */
-uint64_t samd_read_pid(target *t)
-{
-	uint64_t pid = 0;
-	uint8_t i, j;
-
-	/* Five PID registers to read LSB first */
-	for (i = 0, j = 0; i < 5; i++, j += 8)
-		pid |= (target_mem_read32(t, SAMD_DSU_PID(i)) & 0xFF) << j;
-
-	return pid;
-}
-/**
- * Reads the SAM D20 Component ID
- */
-uint32_t samd_read_cid(target *t)
-{
-	uint64_t cid = 0;
-	uint8_t i, j;
-
-	/* Four CID registers to read LSB first */
-	for (i = 0, j = 0; i < 4; i++, j += 8)
-		cid |= (target_mem_read32(t, SAMD_DSU_CID(i)) & 0xFF) << j;
-
-	return cid;
-}
-
-/**
  * Overloads the default cortexm reset function with a version that
  * removes the target from extended reset where required.
  */
@@ -329,7 +298,7 @@ samd20_revB_detach(target *t)
 static void
 samd20_revB_halt_resume(target *t, bool step)
 {
-	cortexm_halt_resume(t, step);
+	target_halt_resume(t, step);
 
 	/* ---- Additional ---- */
 	/* Exit extended reset */
@@ -411,6 +380,7 @@ struct samd_descr samd_parse_device_id(uint32_t did)
 			}
 			break;
 		case 3: samd.series = 11; break;
+		default: samd.series = 0; break;
 	}
 	/* Revision */
 	samd.revision = 'A' + revision;
@@ -456,9 +426,9 @@ struct samd_descr samd_parse_device_id(uint32_t did)
 
 static void samd_add_flash(target *t, uint32_t addr, size_t length)
 {
-	struct target_flash *f = calloc(1, sizeof(*f));
-	if (!f) {			/* calloc failed: heap exhaustion */
-		DEBUG("calloc: failed in %s\n", __func__);
+	struct target_flash *f = MemManager_Alloc(sizeof(*f));
+	if (!f) {			/* MemManager_Alloc failed: heap exhaustion */
+		DEBUG_WARN("MemManager_Alloc: failed in %s\n", __func__);
 		return;
 	}
 
@@ -471,11 +441,15 @@ static void samd_add_flash(target *t, uint32_t addr, size_t length)
 	target_add_flash(t, f);
 }
 
+struct samd_priv_s {
+	char samd_variant_string[60];
+};
+
 bool samd_probe(target *t)
 {
-	char variant_string[60];
-	uint32_t cid = samd_read_cid(t);
-	uint32_t pid = samd_read_pid(t);
+	ADIv5_AP_t *ap = cortexm_ap(t);
+	uint32_t cid = adiv5_ap_read_pidr(ap, SAMD_DSU_CID);
+	uint32_t pid = adiv5_ap_read_pidr(ap, SAMD_DSU_PID);
 
 	/* Check the ARM Coresight Component and Perhiperal IDs */
 	if ((cid != SAMD_CID_VALUE) ||
@@ -489,6 +463,9 @@ bool samd_probe(target *t)
 	if ((did & SAMD_DID_MASK) != SAMD_DID_CONST_VALUE)
 		return false;
 
+	struct samd_priv_s *priv_storage = MemManager_Alloc(sizeof(*priv_storage));
+	t->target_storage = (void*)priv_storage;
+
 	uint32_t ctrlstat = target_mem_read32(t, SAMD_DSU_CTRLSTAT);
 	struct samd_descr samd = samd_parse_device_id(did);
 
@@ -497,14 +474,14 @@ bool samd_probe(target *t)
 
 	/* Part String */
 	if (protected) {
-		sprintf(variant_string,
+		sprintf(priv_storage->samd_variant_string,
 		        "Atmel SAM%c%d%c%d%c%s (rev %c) (PROT=1)",
 		        samd.family,
 		        samd.series, samd.pin, samd.mem,
 		        samd.variant,
 		        samd.package, samd.revision);
 	} else {
-		sprintf(variant_string,
+		sprintf(priv_storage->samd_variant_string,
 		        "Atmel SAM%c%d%c%d%c%s (rev %c)",
 		        samd.family,
 		        samd.series, samd.pin, samd.mem,
@@ -513,7 +490,7 @@ bool samd_probe(target *t)
 	}
 
 	/* Setup Target */
-	t->driver = variant_string;
+	t->driver = priv_storage->samd_variant_string;
 	t->reset = samd_reset;
 
 	if (samd.series == 20 && samd.revision == 'B') {
@@ -876,8 +853,9 @@ static bool samd_cmd_ssb(target *t, int argc, const char **argv)
 		if (target_check_error(t))
 			return -1;
 
-	tc_printf(t, "Set the security bit! "
-		  "You will need to issue 'monitor erase_mass' to clear this.\n");
+	tc_printf(t, "Security bit set! "
+		  "Scan again, attach and issue 'monitor erase_mass' to reset.\n");
 
+	target_reset(t);
 	return true;
 }

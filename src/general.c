@@ -18,21 +18,40 @@
  */
 
 #include "general.h"
+#include "FreeRTOS.h"
+#include "task.h"
+#include "semphr.h"
 
-static kernel_pid_t pid_list[MAX_GDB_NUMBER] = {0};
+static TaskHandle_t pid_list[MAX_GDB_NUMBER] = { 0 };
 static mutex_t		pid_list_mutex;
-
 
 void add_pid_to_list(void)
 {
-	kernel_pid_t pid = thread_getpid();
+    TaskHandle_t pid = xTaskGetCurrentTaskHandle();
+
+    if (pid == NULL)
+    {
+        return;
+    }
 
 	mutex_lock(&pid_list_mutex);
-	for(int i = 0; i < MAX_GDB_NUMBER; ++i) {
-		if(!pid_list[i]) {
+    int insertIndex = -1;
+	for(int i = 0; i < MAX_GDB_NUMBER; ++i)
+    {
+		if(pid_list[i] == NULL)
+        {
 			pid_list[i] = pid;
-			break;
+            continue;
 		}
+        if (pid_list[i] == pid)
+        {
+            if (insertIndex != -1)
+            {
+                pid_list[insertIndex] = NULL;
+            }
+
+            break;
+        }
 	}
 	mutex_unlock(&pid_list_mutex);
 }
@@ -40,11 +59,13 @@ void add_pid_to_list(void)
 int get_thread_number(void)
 {
 	int retVal = -1;
-	kernel_pid_t pid = thread_getpid();
+	kernel_pid_t pid = xTaskGetCurrentTaskHandle();
 
 	mutex_lock(&pid_list_mutex);
-	for(int i = 0; i < MAX_GDB_NUMBER; ++i) {
-		if(pid_list[i] == pid) {
+	for(int i = 0; i < MAX_GDB_NUMBER; ++i)
+    {
+		if(pid_list[i] == pid)
+        {
 			retVal = i;
 			break;
 		}
@@ -55,28 +76,44 @@ int get_thread_number(void)
 
 static int interface_number_list[MAX_GDB_NUMBER] = {0};
 static bool interface_busy_list[INTERFACE_NUMBER] = {0};
-static mutex_t interface_busy_mutex = MUTEX_INIT;
+static mutex_t interface_busy_mutex;
 
 void interface_numbers_init(void)
 {
 	for(int i = 0; i < INTERFACE_NUMBER; ++i)
+    {
 		interface_number_list[i] = -1;
+    }
 }
 
 int get_interface_number(void)
 {
-	return interface_number_list[get_thread_number()];
+    const int thread_number = get_thread_number();
+    if (thread_number < 0)
+    {
+        return -1;
+    }
+	return interface_number_list[thread_number];
 }
 
 bool set_interface_number(int number)
 {
+    const int thread_number = get_thread_number();
+    if (thread_number < 0)
+    {
+        return -1;
+    }
+
 	mutex_lock(&interface_busy_mutex);
-	if(interface_busy_list[number]) {
+	if(interface_busy_list[number])
+    {
 		mutex_unlock(&interface_busy_mutex);
 		return false;
-	} else {
+	}
+    else
+    {
 		interface_busy_list[number] = true;
-		interface_number_list[get_thread_number()] = number;
+		interface_number_list[thread_number] = number;
 		mutex_unlock(&interface_busy_mutex);
 		return true;
 	}
@@ -84,16 +121,33 @@ bool set_interface_number(int number)
 
 bool free_interface(int number)
 {
+    const int thread_number = get_thread_number();
+    if (thread_number < 0)
+    {
+        return -1;
+    }
+
 	mutex_lock(&interface_busy_mutex);
-	if(!interface_busy_list[number]) {
+	if(!interface_busy_list[number])
+    {
 		mutex_unlock(&interface_busy_mutex);
 		return false;
-	} else {
+	}
+    else
+    {
 		interface_busy_list[number] = false;
-		interface_number_list[get_thread_number()] = -1;
+		interface_number_list[thread_number] = -1;
 		mutex_unlock(&interface_busy_mutex);
 		return true;
 	}
 }
 
+void mutex_lock(mutex_t *mutex)
+{
 
+}
+
+void mutex_unlock(mutex_t *mutex)
+{
+
+}

@@ -19,11 +19,9 @@
  */
 
 #include "general.h"
-#include "target.h"
 #include "target_internal.h"
-#include <stdarg.h>
 
-DEF_THREAD_RESOURCE_NON_STATIC(target*, target_list);
+#include <stdarg.h>
 
 static int target_flash_write_buffered(struct target_flash *f,
                                        target_addr dest, const void *src, size_t len);
@@ -34,25 +32,35 @@ static bool nop_function(void)
 	return true;
 }
 
-target *target_new(void)
+static int null_function(void)
 {
-	target *t = (void*)calloc(1, sizeof(*t));
-	if (!t) {			/* calloc failed: heap exhaustion */
-		DEBUG("calloc: failed in %s\n", __func__);
+	return 0;
+}
+
+target *target_new(target **target_list)
+{
+    if (target_list == NULL)
+    {
+        return NULL;
+    }
+
+	target *t = (void*)MemManager_Alloc(sizeof(*t));
+	if (!t) {			/* MemManager_Alloc failed: heap exhaustion */
+		DEBUG_WARN("MemManager_Alloc: failed in %s\n", __func__);
 		return NULL;
 	}
-	if (get_target_list()) {
-		target *c = get_target_list();
+
+	if (*target_list) {
+		target *c = *target_list;
 		while (c->next)
 			c = c->next;
 		c->next = t;
 	} else {
-		set_target_list(t);
+		*target_list = t;
 	}
 
 	t->attach = (void*)nop_function;
 	t->detach = (void*)nop_function;
-	t->check_error = (void*)nop_function;
 	t->mem_read = (void*)nop_function;
 	t->mem_write = (void*)nop_function;
 	t->reg_read = (void*)nop_function;
@@ -63,69 +71,73 @@ target *target_new(void)
 	t->halt_request = (void*)nop_function;
 	t->halt_poll = (void*)nop_function;
 	t->halt_resume = (void*)nop_function;
+	t->check_error = (void*)null_function;
+
+	t->target_storage = NULL;
+
 	return t;
 }
 
-bool target_foreach(void (*cb)(int, target *t, void *context), void *context)
+int target_foreach(target *target_list, void (*cb)(int, target *t, void *context), void *context)
 {
 	int i = 1;
-	bool retVal = false;
-	target *t = get_target_list();
+	target *t = target_list;
 	for (; t; t = t->next, i++)
 		cb(i, t, context);
-	retVal = get_target_list() != NULL;
-	return retVal;
+	return i;
 }
 
 void target_mem_map_free(target *t)
 {
 	while (t->ram) {
 		void * next = t->ram->next;
-		free(t->ram);
+		MemManager_Free(t->ram);
 		t->ram = next;
 	}
 	while (t->flash) {
 		void * next = t->flash->next;
 		if (t->flash->buf)
-			free(t->flash->buf);
-		free(t->flash);
+			MemManager_Free(t->flash->buf);
+		MemManager_Free(t->flash);
 		t->flash = next;
 	}
 }
 
-void target_list_free(void)
+void target_list_free(target **tl)
 {
-	struct target_command_s *tc;
-	target *target_list = get_target_list();
+	struct target_command_s *tcmd;
+
+    target *target_list = *tl;
 
 	while(target_list) {
 		target *t = target_list->next;
-		if (target_list->tc)
+		if (target_list->tc && target_list->tc->destroy_callback)
 			target_list->tc->destroy_callback(target_list->tc, target_list);
 		if (target_list->priv)
 			target_list->priv_free(target_list->priv);
 		while (target_list->commands) {
-			tc = target_list->commands->next;
-			free(target_list->commands);
-			target_list->commands = tc;
+			tcmd = target_list->commands->next;
+			MemManager_Free(target_list->commands);
+			target_list->commands = tcmd;
 		}
+		MemManager_Free(target_list->target_storage);
 		target_mem_map_free(target_list);
 		while (target_list->bw_list) {
 			void * next = target_list->bw_list->next;
-			free(target_list->bw_list);
+			MemManager_Free(target_list->bw_list);
 			target_list->bw_list = next;
 		}
-		free(target_list);
+		MemManager_Free(target_list);
 		target_list = t;
 	}
-	set_target_list(NULL);
+    *tl = target_list;
 }
 
 void target_add_commands(target *t, const struct command_s *cmds, const char *name)
 {
-	struct target_command_s *tc = malloc(sizeof(*tc));
-	if (!tc) {			/* malloc failed: heap exhaustion */
-		DEBUG("malloc: failed in %s\n", __func__);
+	struct target_command_s *tc = MemManager_Alloc(sizeof(*tc));
+	if (!tc) {			/* MemManager_Alloc failed: heap exhaustion */
+		DEBUG_WARN("MemManager_Alloc: failed in %s\n", __func__);
 		return;
 	}
 
@@ -145,14 +157,10 @@ target *target_attach_n(int n, struct target_controller *tc)
 {
 	target *t;
 	int i;
-	target *retVal = NULL;
-	for(t = get_target_list(), i = 1; t; t = t->next, i++) {
-		if(i == n) {
-			retVal = target_attach(t, tc);
-			break;
-		}
-	}
-	return retVal;
+	for(t = tc->target_list, i = 1; t; t = t->next, i++)
+		if(i == n)
+			return target_attach(t, tc);
+	return NULL;
 }
 
 target *target_attach(target *t, struct target_controller *tc)
@@ -171,9 +179,9 @@ target *target_attach(target *t, struct target_controller *tc)
 
 void target_add_ram(target *t, target_addr start, uint32_t len)
 {
-	struct target_ram *ram = malloc(sizeof(*ram));
-	if (!ram) {			/* malloc failed: heap exhaustion */
-		DEBUG("malloc: failed in %s\n", __func__);
+	struct target_ram *ram = MemManager_Alloc(sizeof(*ram));
+	if (!ram) {			/* MemManager_Alloc failed: heap exhaustion */
+		DEBUG_WARN("MemManager_Alloc: failed in %s\n", __func__);
 		return;
 	}
 
@@ -243,7 +251,7 @@ int target_flash_erase(target *t, target_addr addr, size_t len)
 	while (len) {
 		struct target_flash *f = flash_for_addr(t, addr);
 		if (!f) {
-			DEBUG("Erase stopped at 0x%06" PRIx32 "\n", addr);
+			DEBUG_WARN("Erase stopped at 0x%06" PRIx32 "\n", addr);
 			return ret;
 		}
 		size_t tmptarget = MIN(addr + len, f->start + f->length);
@@ -261,6 +269,8 @@ int target_flash_write(target *t,
 	int ret = 0;
 	while (len) {
 		struct target_flash *f = flash_for_addr(t, dest);
+		if (!f)
+			return 1;
 		size_t tmptarget = MIN(dest + len, f->start + f->length);
 		size_t tmplen = tmptarget - dest;
 		ret |= target_flash_write_buffered(f, dest, src, tmplen);
@@ -278,7 +288,7 @@ int target_flash_done(target *t)
 		if (tmp)
 			return tmp;
 		if (f->done) {
-			int tmp = f->done(f);
+			tmp = f->done(f);
 			if (tmp)
 				return tmp;
 		}
@@ -293,9 +303,9 @@ int target_flash_write_buffered(struct target_flash *f,
 
 	if (f->buf == NULL) {
 		/* Allocate flash sector buffer */
-		f->buf = malloc(f->buf_size);
-		if (!f->buf) {			/* malloc failed: heap exhaustion */
-			DEBUG("malloc: failed in %s\n", __func__);
+		f->buf = MemManager_Alloc(f->buf_size);
+		if (!f->buf) {			/* MemManager_Alloc failed: heap exhaustion */
+			DEBUG_WARN("MemManager_Alloc: failed in %s\n", __func__);
 			return 1;
 		}
 		f->buf_addr = -1;
@@ -330,7 +340,7 @@ int target_flash_done_buffered(struct target_flash *f)
 		/* Write sector to flash if valid */
 		ret = f->write(f, f->buf_addr, f->buf, f->buf_size);
 		f->buf_addr = -1;
-		free(f->buf);
+		MemManager_Free(f->buf);
 		f->buf = NULL;
 	}
 
@@ -342,13 +352,18 @@ void target_detach(target *t)
 {
 	t->detach(t);
 	t->attached = false;
-#if defined(PC_HOSTED)
-# include "platform.h"
+#if PC_HOSTED == 1
 	platform_buffer_flush();
 #endif
 }
 
-bool target_check_error(target *t) { return t->check_error(t); }
+bool target_check_error(target *t) {
+	if (t)
+		return t->check_error(t);
+	else
+		return false;
+}
+
 bool target_attached(target *t) { return t->attached; }
 
 /* Memory access functions */
@@ -406,6 +421,25 @@ enum target_halt_reason target_halt_poll(target *t, target_addr *watch)
 
 void target_halt_resume(target *t, bool step) { t->halt_resume(t, step); }
 
+/* Command line for semihosting get_cmdline */
+void target_set_cmdline(target *t, char *cmdline) {
+	uint32_t len_dst;
+	len_dst = sizeof(t->cmdline)-1;
+	strncpy(t->cmdline, cmdline, len_dst -1);
+	t->cmdline[strlen(t->cmdline)]='\0';
+	DEBUG_INFO("cmdline: >%s<\n", t->cmdline);
+	}
+
+/* Set heapinfo for semihosting */
+void target_set_heapinfo(target *t, target_addr heap_base, target_addr heap_limit,
+	target_addr stack_base, target_addr stack_limit) {
+	if (t == NULL) return;
+	t->heapinfo[0] = heap_base;
+	t->heapinfo[1] = heap_limit;
+	t->heapinfo[2] = stack_base;
+	t->heapinfo[3] = stack_limit;
+}
+
 /* Break-/watchpoint functions */
 int target_breakwatch_set(target *t,
                           enum target_breakwatch type, target_addr addr, size_t len)
@@ -422,9 +456,9 @@ int target_breakwatch_set(target *t,
 
 	if (ret == 0) {
 		/* Success, make a heap copy */
-		struct breakwatch *bwm = malloc(sizeof bw);
-		if (!bwm) {			/* malloc failed: heap exhaustion */
-			DEBUG("malloc: failed in %s\n", __func__);
+		struct breakwatch *bwm = MemManager_Alloc(sizeof bw);
+		if (!bwm) {			/* MemManager_Alloc failed: heap exhaustion */
+			DEBUG_WARN("MemManager_Alloc: failed in %s\n", __func__);
 			return 1;
 		}
 		memcpy(bwm, &bw, sizeof(bw));
@@ -460,7 +494,7 @@ int target_breakwatch_clear(target *t,
 		} else {
 			bwp->next = bw->next;
 		}
-		free(bw);
+		MemManager_Free(bw);
 	}
 	return ret;
 }
@@ -484,6 +518,16 @@ const char *target_driver_name(target *t)
 const char *target_core_name(target *t)
 {
 	return t->core;
+}
+
+unsigned int target_designer(target *t)
+{
+	return t->t_designer;
+}
+
+unsigned int target_idcode(target *t)
+{
+	return t->idcode;
 }
 
 uint32_t target_mem_read32(target *t, uint32_t addr)
@@ -536,38 +580,8 @@ int target_command(target *t, int argc, const char *argv[])
 	for (struct target_command_s *tc = t->commands; tc; tc = tc->next)
 		for(const struct command_s *c = tc->cmds; c->cmd; c++)
 			if(!strncmp(argv[0], c->cmd, strlen(argv[0])))
-				return !c->handler(t, argc, argv);
+				return (c->handler(t, argc, argv)) ? 0 : 1;
 	return -1;
-}
-
-uint8_t target_get_flash_mode(target *t)
-{
-	return t->flash_mode;
-}
-
-void target_set_flash_mode(target *t, uint8_t flash_mode)
-{
-	t->flash_mode = flash_mode;
-}
-
-long target_get_wait_timeout(target *t)
-{
-	return t->wait_timeout;
-}
-
-void target_set_wait_timeout(target *t, long wait_timeout)
-{
-	t->wait_timeout = wait_timeout;
-}
-
-long target_get_connect_srst(target *t)
-{
-	return t->connect_assert_srst;
-}
-
-void target_set_connect_srst(target *t, bool connect_assert_srst)
-{
-	t->connect_assert_srst = connect_assert_srst;
 }
 
 void tc_printf(target *t, const char *fmt, ...)
@@ -580,6 +594,7 @@ void tc_printf(target *t, const char *fmt, ...)
 
 	va_start(ap, fmt);
 	t->tc->printf(t->tc, fmt, ap);
+	fflush(stdout);
 	va_end(ap);
 }
 

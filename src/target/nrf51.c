@@ -31,6 +31,7 @@ static int nrf51_flash_write(struct target_flash *f,
                              target_addr dest, const void *src, size_t len);
 
 static bool nrf51_cmd_erase_all(target *t, int argc, const char **argv);
+static bool nrf51_cmd_erase_uicr(target *t, int argc, const char **argv);
 static bool nrf51_cmd_read_hwid(target *t, int argc, const char **argv);
 static bool nrf51_cmd_read_fwid(target *t, int argc, const char **argv);
 static bool nrf51_cmd_read_deviceid(target *t, int argc, const char **argv);
@@ -41,6 +42,7 @@ static bool nrf51_cmd_read(target *t, int argc, const char **argv);
 
 const struct command_s nrf51_cmd_list[] = {
 	{"erase_mass", (cmd_handler)nrf51_cmd_erase_all, "Erase entire flash memory"},
+	{"erase_uicr", (cmd_handler)nrf51_cmd_erase_uicr, "Erase UICR registers"},
 	{"read", (cmd_handler)nrf51_cmd_read, "Read device parameters"},
 	{NULL, NULL, NULL}
 };
@@ -97,9 +99,9 @@ const struct command_s nrf51_read_cmd_list[] = {
 static void nrf51_add_flash(target *t,
                             uint32_t addr, size_t length, size_t erasesize)
 {
-	struct target_flash *f = calloc(1, sizeof(*f));
-	if (!f) {			/* calloc failed: heap exhaustion */
-		DEBUG("calloc: failed in %s\n", __func__);
+	struct target_flash *f = MemManager_Alloc(sizeof(*f));
+	if (!f) {			/* MemManager_Alloc failed: heap exhaustion */
+		DEBUG_WARN("MemManager_Alloc: failed in %s\n", __func__);
 		return;
 	}
 
@@ -132,8 +134,8 @@ bool nrf51_probe(target *t)
 	if ((info_part != 0xffffffff) && (info_part != 0) &&
 		((info_part & 0x00ff000) == 0x52000)) {
 		uint32_t ram_size = target_mem_read32(t, NRF52_INFO_RAM);
-		t->idcode = info_part;
 		t->driver = "Nordic nRF52";
+		t->target_options |= CORTEXM_TOPT_INHIBIT_SRST;
 		target_add_ram(t, 0x20000000, ram_size * 1024);
 		nrf51_add_flash(t, 0, page_size * code_size, page_size);
 		nrf51_add_flash(t, NRF51_UICR, page_size, page_size);
@@ -145,6 +147,7 @@ bool nrf51_probe(target *t)
 		 * IDCODE is kept as '0', as deciphering is hard and
 		 * there is later no usage.*/
 		target_add_ram(t, 0x20000000, 0x8000);
+		t->target_options |= CORTEXM_TOPT_INHIBIT_SRST;
 		nrf51_add_flash(t, 0, page_size * code_size, page_size);
 		nrf51_add_flash(t, NRF51_UICR, page_size, page_size);
 		target_add_commands(t, nrf51_cmd_list, "nRF51");
@@ -234,6 +237,31 @@ static bool nrf51_cmd_erase_all(target *t, int argc, const char **argv)
 
 	/* Erase all */
 	target_mem_write32(t, NRF51_NVMC_ERASEALL, 1);
+
+	/* Poll for NVMC_READY */
+	while (target_mem_read32(t, NRF51_NVMC_READY) == 0)
+		if(target_check_error(t))
+			return false;
+
+	return true;
+}
+
+static bool nrf51_cmd_erase_uicr(target *t, int argc, const char **argv)
+{
+	(void)argc;
+	(void)argv;
+	tc_printf(t, "erase..\n");
+
+	/* Enable erase */
+	target_mem_write32(t, NRF51_NVMC_CONFIG, NRF51_NVMC_CONFIG_EEN);
+
+	/* Poll for NVMC_READY */
+	while (target_mem_read32(t, NRF51_NVMC_READY) == 0)
+		if(target_check_error(t))
+			return false;
+
+	/* Erase UICR */
+	target_mem_write32(t, NRF51_NVMC_ERASEUICR, 1);
 
 	/* Poll for NVMC_READY */
 	while (target_mem_read32(t, NRF51_NVMC_READY) == 0)
@@ -377,6 +405,12 @@ const struct command_s nrf51_mdm_cmd_list[] = {
 	{NULL, NULL, NULL}
 };
 
+#define MDM_POWER_EN ADIV5_DP_REG(0x01)
+#define MDM_SELECT_AP ADIV5_DP_REG(0x02)
+#define MDM_STATUS  ADIV5_AP_REG(0x08)
+#define MDM_CONTROL ADIV5_AP_REG(0x04)
+#define MDM_PROT_EN  ADIV5_AP_REG(0x0C)
+
 void nrf51_mdm_probe(ADIv5_AP_t *ap)
 {
 	switch(ap->idr) {
@@ -386,7 +420,7 @@ void nrf51_mdm_probe(ADIv5_AP_t *ap)
 		return;
 	}
 
-	target *t = target_new();
+	target *t = target_new(&(ap->dp->tc->target_list));
 	if (!t) {
 		return;
 	}
@@ -395,17 +429,16 @@ void nrf51_mdm_probe(ADIv5_AP_t *ap)
 	t->priv = ap;
 	t->priv_free = (void*)adiv5_ap_unref;
 
-	t->driver = "Nordic nRF52 Access Port";
+	uint32_t status = adiv5_ap_read(ap, MDM_PROT_EN);
+	status = adiv5_ap_read(ap, MDM_PROT_EN);
+	if (status)
+		t->driver = "Nordic nRF52 Access Port";
+	else
+		t->driver = "Nordic nRF52 Access Port (protected)";
 	t->regs_size = 4;
+    t->tc = ap->dp->tc;
 	target_add_commands(t, nrf51_mdm_cmd_list, t->driver);
 }
-
-#define MDM_POWER_EN ADIV5_DP_REG(0x01)
-#define MDM_SELECT_AP ADIV5_DP_REG(0x02)
-#define MDM_STATUS  ADIV5_AP_REG(0x08)
-#define MDM_CONTROL ADIV5_AP_REG(0x04)
-#define MDM_PROT_EN  ADIV5_AP_REG(0x0C)
-
 
 static bool nrf51_mdm_cmd_erase_mass(target *t, int argc, const char **argv)
 {

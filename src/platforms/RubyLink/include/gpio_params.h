@@ -22,7 +22,6 @@
 #define GPIO_PARAMS_H
 
 #include "board.h"
-#include "saul/periph.h"
 
 #ifdef __cplusplus
 extern "C" {
