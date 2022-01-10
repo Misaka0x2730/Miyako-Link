@@ -90,4 +90,9 @@ pico_generate_pio_header(RubyLink ${CMAKE_CURRENT_LIST_DIR}/pio/swd_dp_low_acces
 target_link_libraries(RubyLink PUBLIC pico_stdlib hardware_spi hardware_i2c hardware_pio tinyusb_device tinyusb_board tinyusb_additions)
 target_link_libraries(RubyLink PUBLIC FreeRTOS-Kernel FreeRTOS-Kernel-Heap1)
 
+get_target_property(DirDefs tinyusb_common_base INTERFACE_COMPILE_DEFINITIONS)
+list(FILTER DirDefs EXCLUDE REGEX [[^CFG_TUSB_OS=OPT_OS_PICO$]])
+set_property(TARGET tinyusb_common_base PROPERTY INTERFACE_COMPILE_DEFINITIONS ${DirDefs})
+target_compile_definitions(tinyusb_common_base INTERFACE CFG_TUSB_OS=OPT_OS_FREERTOS)
+
 pico_add_extra_outputs(RubyLink)

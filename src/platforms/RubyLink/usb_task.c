@@ -1,8 +1,11 @@
+#include <complex.h>
+#include <sys/cdefs.h>
 #include "tusb.h"
 #include "FreeRTOS.h"
+#include "task.h"
 #include "usb_task.h"
 
-static void usb_task_thread(void *param);
+_Noreturn static void usb_task_thread(void *param);
 
 void usb_task_init(void)
 {
@@ -17,7 +20,7 @@ void usb_task_init(void)
     vTaskCoreAffinitySet(usb_task, 0x01);
 }
 
-static void usb_task_thread(void *param)
+_Noreturn static void usb_task_thread(void *param)
 {
     (void) param;
 
