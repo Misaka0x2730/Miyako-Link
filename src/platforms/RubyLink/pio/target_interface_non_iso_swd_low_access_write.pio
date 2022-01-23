@@ -1,0 +1,53 @@
+.program target_interface_non_iso_swd_low_access_write
+.side_set 1 opt
+
+.wrap_target
+
+pull
+mov y, OSR
+
+pull
+set x, 7
+
+req_loop:
+    out pins, 1 side 0
+    jmp x-- req_loop side 1
+
+set pins, 0 side 0
+out pindirs, 1 side 1
+set x, 2
+
+ack_loop:
+    in pins, 1 side 0
+    jmp x-- ack_loop side 1   ; Decrement counter and set rising edge on SWCLK
+
+mov x, ISR side 0
+
+set pins, 1 side 1
+out pindirs, 1 side 0
+
+jmp x!=y ack_not_ok
+
+pull
+set x, 31
+
+data_loop:
+     out pins, 1 side 0
+     jmp x-- data_loop side 1   ; Decrement counter and set rising edge on SWCLK
+
+pull
+set x, 7
+
+parity_loop:
+   out pins, 1 side 0
+   jmp x-- parity_loop side 1   ; Decrement counter and set rising edge on SWCLK
+
+jmp write_done
+
+ack_not_ok:
+    pull
+    pull
+
+write_done:
+     push side 0
+    .wrap

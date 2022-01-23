@@ -1,0 +1,57 @@
+.program target_interface_non_iso_swd_low_access_read
+.side_set 1 opt
+                ; SWDIO is set as OUT and IN pin
+                ; SWDIO_DIR is set as SET pin
+                ; SWCLK is set as side-set pin
+
+;pull
+;mov x, OSR
+
+;jmp !x dir_not_changed
+
+;set pins, 1 side 1
+;out pindirs, 1 side 0
+
+;dir_not_changed:
+pull            ; Pull acknowledgment value from TX FIFO
+mov y, OSR      ; Save acknowledgment value in scratch Y register
+
+pull
+set x, 7        ; Set byte counter to 8 (8 - 1 = 7)
+
+                ; Target sets data on SWDIO and read data from SWDIO on the rising edge of SWCLK
+                ; Host sets data on SWDIO and read data from SWDIO on the falling edge of SWCLK
+req_loop:
+    out pins, 1 side 0
+    jmp x-- req_loop side 1
+
+set x, 2 side 0
+set pins, 0 side 1
+out pindirs, 1
+
+ack_loop:
+    in pins, 1 side 0
+    jmp x-- ack_loop side 1   ; Decrement counter and set rising edge on SWCLK
+
+mov x, ISR side 0 ; Read ISR contents to scratch X register
+
+jmp x!=y read_done  ; Compare X and Y registers, if data from target are not ACK - go to the end
+
+push
+set x, 31           ; Next 32 bytes (32 - 1 = 31) is data from target
+
+data_loop:
+    in pins, 1 side 1
+    jmp x-- data_loop side 0   ; Decrement counter and set rising edge on SWCLK
+
+in pins, 1 side 1
+nop side 0
+;nop side 0
+
+read_done:
+     nop side 1
+     set pins, 1 side 0     ; Set falling edge on SWCLK
+     out pindirs, 1 side 0   ; Set rising edge on SWCLK and change SWDIO pin direction to output (9th bit in packet)
+     out pins, 1        ; Set falling edge on SWCLK
+
+     push

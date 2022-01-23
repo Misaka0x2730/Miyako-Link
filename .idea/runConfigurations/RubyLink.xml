@@ -1,0 +1,8 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="RubyLink" type="com.jetbrains.cidr.embedded.customgdbserver.type" factoryName="com.jetbrains.cidr.embedded.customgdbserver.factory" nameIsGenerated="true" PROGRAM_PARAMS="-port 2331 -if SWD -speed 1000 -device RP2040_M0_0" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="MiyakoLink" TARGET_NAME="RubyLink" CONFIG_NAME="Debug" version="1" RUN_TARGET_PROJECT_NAME="MiyakoLink" RUN_TARGET_NAME="RubyLink">
+    <custom-gdb-server version="1" gdb-connect="localhost:2331" executable="C:\Program Files\SEGGER\JLink\JLinkGDBServerCL.exe" warmup-ms="500" download-type="ALWAYS" reset-cmd="monitor reset 2" reset-after-download="true">
+      <debugger toolchainName="MinGW" />
+    </custom-gdb-server>
+    <method v="2" />
+  </configuration>
+</component>

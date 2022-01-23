@@ -1,0 +1,34 @@
+.program target_interface_non_iso_swd_low_seq_out
+.side_set 1 opt
+
+pull
+mov x, OSR
+
+jmp !x dir_not_changed
+
+;nop side 1
+;nop side 0
+set pins, 1 side 1
+out pindirs, 1 side 0
+
+dir_not_changed:
+pull
+mov x, OSR
+
+pull
+data_loop:
+out pins, 1 side 0
+jmp x-- data_loop side 1
+
+pull
+out y, 1
+
+jmp !y write_done
+
+out pins, 1 side 0
+nop side 1
+nop side 0
+
+write_done:
+    out ISR, 1 side 0
+    push

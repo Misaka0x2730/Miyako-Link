@@ -92,8 +92,8 @@ typedef enum {
 	PIN_JTAG_TDO,
 	PIN_JTAG_TDI,
 
-	PIN_I2C_SCK,
-	PIN_I2C_SDA,
+	//PIN_I2C_SCK,
+	//PIN_I2C_SDA,
 
 	PIN_SPI_SCK,
 	PIN_SPI_MOSI,

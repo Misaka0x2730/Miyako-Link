@@ -393,7 +393,7 @@ bool cortexa_attach(target *t)
 
 	target_halt_request(t);
 	tries = 10;
-	while(!platform_srst_get_val() && !target_halt_poll(t, NULL) && --tries)
+	while(!t->tc->platform_srst_get_val() && !target_halt_poll(t, NULL) && --tries)
 		platform_delay(200);
 	if(!tries)
 		return false;
@@ -405,7 +405,7 @@ bool cortexa_attach(target *t)
 	priv->hw_breakpoint_mask = 0;
 	priv->bcr0 = 0;
 
-	platform_srst_set_val(false);
+	t->tc->platform_srst_set_val(false);
 
 	return true;
 }
@@ -576,8 +576,8 @@ static void cortexa_reset(target *t)
 	target_mem_write32(t, ZYNQ_SLCR_PSS_RST_CTRL, 1);
 
 	/* Try hard reset too */
-	platform_srst_set_val(true);
-	platform_srst_set_val(false);
+	t->tc->platform_srst_set_val(true);
+	t->tc->platform_srst_set_val(false);
 
 	/* Spin until Xilinx reconnects us */
 	platform_timeout timeout;

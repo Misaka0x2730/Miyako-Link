@@ -518,7 +518,7 @@ bool samd_probe(target *t)
 	target_add_commands(t, samd_cmd_list, "SAMD");
 
 	/* If we're not in reset here */
-	if (!platform_srst_get_val()) {
+	if (!t->tc->platform_srst_get_val()) {
 		/* We'll have to release the target from
 		 * extended reset to make attach possible */
 		if (target_mem_read32(t, SAMD_DSU_CTRLSTAT) &

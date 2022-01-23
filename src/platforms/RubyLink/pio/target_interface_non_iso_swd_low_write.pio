@@ -1,8 +1,16 @@
-.program swd_dp_low_access_write
+.program target_interface_non_iso_swd_low_write
 .side_set 1 opt
 
-.wrap_target
+pull
+mov x, OSR
 
+jmp !x dir_not_changed
+
+set pins, 1 side 1
+out pindirs, 1 side 0
+out pins, 1
+
+dir_not_changed:
 pull
 set x, 7
 
@@ -23,11 +31,6 @@ set x, 1 side 1
 mov OSR, x
 out pindirs, 1
 
-set x, 4
-mov y, ISR
-
-jmp x!=y ack_not_ok
-
 pull
 set x, 31
 
@@ -36,19 +39,5 @@ data_loop:
     jmp x-- data_loop side 1
 
 pull
-set x, 8
-parity_loop:
-    out pins, 1 side 0
-    jmp x-- parity_loop side 1
-
-push noblock side 1
-jmp write_done
-
-ack_not_ok:
-    pull
-    pull
-    push noblock
-
-write_done:
-     nop
-    .wrap
+out pins, 1 side 0
+push noblock

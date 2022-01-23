@@ -154,27 +154,27 @@ static void remotePacketProcessSWD(unsigned i, char *packet)
 
     case REMOTE_IN_PAR: /* SI = In parity ============================= */
 		ticks=remotehston(2,&packet[2]);
-		badParity = remote_dp.seq_in_parity(&param, ticks);
+		badParity = remote_dp.seq_in_parity(remote_dp.tc, &param, ticks);
 		_respond(badParity?REMOTE_RESP_PARERR:REMOTE_RESP_OK,param);
 		break;
 
     case REMOTE_IN: /* Si = In ======================================= */
 		ticks=remotehston(2,&packet[2]);
-		param = remote_dp.seq_in(ticks);
+		param = remote_dp.seq_in(remote_dp.tc, ticks);
 		_respond(REMOTE_RESP_OK,param);
 		break;
 
     case REMOTE_OUT: /* So= Out ====================================== */
 		ticks=remotehston(2,&packet[2]);
 		param=remotehston(-1, &packet[4]);
-		remote_dp.seq_out(param, ticks);
+		remote_dp.seq_out(remote_dp.tc, param, ticks);
 		_respond(REMOTE_RESP_OK, 0);
 		break;
 
     case REMOTE_OUT_PAR: /* SO = Out parity ========================== */
 		ticks=remotehston(2,&packet[2]);
 		param=remotehston(-1, &packet[4]);
-		remote_dp.seq_out_parity(param, ticks);
+		remote_dp.seq_out_parity(remote_dp.tc, param, ticks);
 		_respond(REMOTE_RESP_OK, 0);
 		break;
 
@@ -280,36 +280,41 @@ static void remotePacketProcessGEN(unsigned i, char *packet)
 		break;
 
     case REMOTE_SRST_SET:
-		platform_srst_set_val(packet[2]=='1');
+		//platform_srst_set_val(packet[2]=='1');
+        //TODO: fix it
 		_respond(REMOTE_RESP_OK,0);
 		break;
 
     case REMOTE_SRST_GET:
-		_respond(REMOTE_RESP_OK,platform_srst_get_val());
+		//_respond(REMOTE_RESP_OK,platform_srst_get_val());
+        //TODO: fix it
 		break;
     case REMOTE_FREQ_SET:
-		platform_max_frequency_set( remotehston(8, packet + 2));
-		_respond(REMOTE_RESP_OK, 0);
+		//platform_max_frequency_set( remotehston(8, packet + 2));
+		//_respond(REMOTE_RESP_OK, 0);
+        //TODO: fix it
 		break;
     case REMOTE_FREQ_GET:
-		freq = platform_max_frequency_get();
-		_respond_buf(REMOTE_RESP_OK, (uint8_t*)&freq, 4);
+		//freq = platform_max_frequency_get();
+		//_respond_buf(REMOTE_RESP_OK, (uint8_t*)&freq, 4);
+        //TODO: fix it
 		break;
 
     case REMOTE_PWR_SET:
 #ifdef PLATFORM_HAS_POWER_SWITCH
-		if (packet[2]=='1'
+		/*if (packet[2]=='1'
 			&& !platform_target_get_power()
 			&& platform_target_voltage_sense() > POWER_CONFLICT_THRESHOLD)
-		{
+		{*/
 			/* want to enable target power, but voltage > 0.5V sensed
 			 * on the pin -> cancel
 			 */
-			_respond(REMOTE_RESP_ERR,0);
+			/*_respond(REMOTE_RESP_ERR,0);
 		} else {
 			platform_target_set_power(packet[2]=='1');
 			_respond(REMOTE_RESP_OK,0);
-		}
+		}*/
+        //TODO: fix it
 #else
 		_respond(REMOTE_RESP_NOTSUP,0);
 #endif
@@ -317,7 +322,8 @@ static void remotePacketProcessGEN(unsigned i, char *packet)
 
     case REMOTE_PWR_GET:
 #ifdef PLATFORM_HAS_POWER_SWITCH
-		_respond(REMOTE_RESP_OK,platform_target_get_power());
+		//_respond(REMOTE_RESP_OK,platform_target_get_power());
+        //TODO: fix it
 #else
 		_respond(REMOTE_RESP_NOTSUP,0);
 #endif
@@ -340,7 +346,8 @@ static void remotePacketProcessHL(unsigned i, char *packet)
 
 {
 	(void)i;
-	SET_IDLE_STATE(0);
+	//SET_IDLE_STATE(0);
+    //TODO: fix it
 
 	ADIv5_AP_t remote_ap;
 	/* Re-use packet buffer. Align to DWORD! */
@@ -436,7 +443,8 @@ static void remotePacketProcessHL(unsigned i, char *packet)
 		_respond(REMOTE_RESP_ERR,REMOTE_ERROR_UNRECOGNISED);
 		break;
 	}
-	SET_IDLE_STATE(1);
+	//SET_IDLE_STATE(1);
+    //TODO: fix it
 }
 
 

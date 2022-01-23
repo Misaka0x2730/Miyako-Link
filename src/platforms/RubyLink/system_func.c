@@ -6,14 +6,17 @@
 #include "hardware/gpio.h"
 #include "hardware/timer.h"
 #include "task.h"
+#include "semphr.h"
 
 //#define LOG_BUFFER_SIZE     (POOL_SIZE_1024)
 
 static QueueHandle_t logQueue;
+static SemaphoreHandle_t system_log_mutex;
 
 void System_Init(void)
 {
     logQueue = xQueueCreate(10, sizeof(uint32_t));
+    system_log_mutex = xSemaphoreCreateRecursiveMutex();
 }
 
 bool System_IsInInterrupt(void)
@@ -24,6 +27,16 @@ bool System_IsInInterrupt(void)
 void System_Assert(const char* file, const int line)
 {
     //__BKPT(0);
+}
+
+void System_Log_Lock(void)
+{
+    xSemaphoreTake(system_log_mutex, SYSTEM_WAIT_FOREVER);
+}
+
+void System_Log_Unlock(void)
+{
+    xSemaphoreGive(system_log_mutex);
 }
 
 void System_Log(const char* message, ...)
@@ -55,7 +68,7 @@ void System_SendLogToTask(const uint32_t address)
 {
     const char *dataPtr = (char*)(address);
 
-    BaseType_t result = xQueueSendToFront(logQueue, &address, SYSTEM_WAIT_DONT_BLOCK);
+    BaseType_t result = xQueueSendToBack(logQueue, &address, SYSTEM_WAIT_DONT_BLOCK);
 
     if (result != pdTRUE)
     {

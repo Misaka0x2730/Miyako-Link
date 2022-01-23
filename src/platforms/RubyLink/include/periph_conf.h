@@ -1,34 +1,72 @@
-/*
- * Copyright (C) 2021 Otto-von-Guericke-Universität Magdeburg
- *
- * This file is subject to the terms and conditions of the GNU Lesser
- * General Public License v2.1. See the file LICENSE in the top level
- * directory for more details.
- */
+#ifndef __PERIPH_CONF_H
+#define __PERIPH_CONF_H
 
-/**
- * @ingroup         boards_rpi_pico
- * @{
- *
- * @file
- * @brief           Configuration of CPU peripherals for the Raspberry Pi Pico
- * @author          Marian Buschsieweke <marian.buschsieweke@ovgu.de>
- */
-
-#ifndef PERIPH_CONF_H
-#define PERIPH_CONF_H
-
-#include <stdint.h>
-
-#ifdef __cplusplus
+/*#ifdef __cplusplus
 extern "C" {
-#endif
+#endif*/
+
+#define MUX_PIN_BIT               (1 << 31)
+#define PIN_IS_MUX_PIN(pin)       ((pin) & MUX_PIN_BIT)
 
 typedef uint8_t gpio_t;
 
+typedef enum
+{
+    PIN_NATIVE_FIRST = 0,
+    PIN_ETH_MISO = PIN_NATIVE_FIRST,
+    PIN_ETH_CS,
+    PIN_ETH_SCLK,
+    PIN_ETH_MOSI,
+    PIN_ETH_RST,
+    PIN_ETH_INT,
+    PIN_I2C_SDA,
+    PIN_I2C_SCL,
+    PIN_TARGET1_TX,
+    PIN_TARGET1_RX,
+    PIN_TARGET2_TDI,
+    PIN_TARGET2_RST,
+    PIN_TARGET2_TCK,
+    PIN_TARGET2_TMS_OUT_EN,
+    PIN_TARGET1_TDO,
+    PIN_MUX_DATA,
+    PIN_TARGET1_TMS_DIR_PIN,
+    PIN_TARGET1_TMS,
+    PIN_TARGET1_TCK,
+    PIN_TARGET1_TDI,
+    PIN_MUX_OE,
+    PIN_MUX_LATCH,
+    PIN_MUX_CLK,
+    PIN_TARGET2_TDO,
+    PIN_TARGET2_TMS_IN,
+    PIN_TARGET2_TMS_OUT,
+    PIN_TARGET2_TMS_DIR,
+    PIN_TARGET2_PWR_EN,
+    PIN_TARGET2_TX,
+    PIN_TARGET2_RX,
+    PIN_NATIVE_LAST = PIN_TARGET2_RX,
+    PIN_NATIVE_COUNT = PIN_NATIVE_LAST - PIN_NATIVE_FIRST + 1,
+
+    PIN_MUX_FIRST_PIN = MUX_PIN_BIT,
+    PIN_TARGET_1_LED_ACT = PIN_MUX_FIRST_PIN,
+    PIN_TARGET_1_LED_SER,
+    PIN_TARGET_1_LED_ERR,
+    PIN_TARGET_2_LED_ACT,
+    PIN_TARGET_2_LED_SER,
+    PIN_TARGET_2_LED_ERR,
+    PIN_TARGET_1_VREF_PWR_EN,
+    PIN_TARGET_2_VREF_PWR_EN,
+    PIN_LED_ETH,
+    PIN_LED_USB,
+    PIN_LED_SYS,
+    PIN_TARGET_1_PWR_EN,
+    PIN_TARGET_1_RST,
+    PIN_MUX_LAST_PIN = PIN_TARGET_1_RST,
+    PIN_MUX_COUNT = PIN_MUX_LAST_PIN - PIN_MUX_FIRST_PIN + 1
+} platform_pin_t;
+
 #ifdef __cplusplus
-}
+//}
 #endif
 
-#endif /* PERIPH_CONF_H */
+#endif /* __PERIPH_CONF_H */
 /** @} */

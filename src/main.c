@@ -45,6 +45,10 @@
 #include "wizchip_conf.h"
 #include "usb_task.h"
 #include "usb_cdc_task.h"
+#include "logging.h"
+
+#include "system_pins.h"
+#include "stream_buffer.h"
 
 #define GDB_THREAD_NAME_LENGTH	(20)
 /*#define GDB_STACK_SIZE			(THREAD_STACKSIZE_LARGE*2)
@@ -110,137 +114,11 @@ void gdb_threads_start(void)
 	}*/
 }
 
-#define MUX_GPIO_START  (0x80)
-
-typedef enum
-{
-    MUX_TARGET1_LED_ACT = MUX_GPIO_START,
-    MUX_TARGET1_LED_SER,
-    MUX_TARGET1_LED_ERR,
-    MUX_TARGET2_LED_ACT,
-    MUX_TARGET2_LED_SER,
-    MUX_TARGET2_LED_ERR,
-    MUX_TARGET1_VREF_PWR_EN,
-    MUX_TARGET2_VREF_PWR_EN,
-    MUX_LED_ETH,
-    MUX_LED_USB,
-    MUX_LED_SYS,
-    MUX_TARGET1_PWR_EN,
-    MUX_TARGET1_RST
-} Mux_GPIO_List_t;
-
-#define SHIFT_LED_CLK_GPIO    (22)
-#define SHIFT_LED_DATA_GPIO   (15)
-#define SHIFT_LED_LATCH_GPIO  (21)
-#define SHIFT_LED_OE_GPIO     (20)
-
-TaskHandle_t LedTask;
-
-#define MUX_GPIO_TASK_EVENT_UPDATE   (0x01)
-#define MUX_GPIO_TASK_EVENT_TIMEOUT  (0x02)
-
-static uint32_t mux_gpio_value = 0;
-
-void mux_gpio_set(uint8_t pin, uint8_t value)
-{
-    if (pin < MUX_GPIO_START)
-    {
-        gpio_put(pin, value);
-    }
-    else
-    {
-        value &= ~MUX_GPIO_START;
-        if (value)
-        {
-            Atomic_OR_u32(&mux_gpio_value, (1 << value));
-        }
-        else
-        {
-            Atomic_AND_u32(&mux_gpio_value, ~(1 << value));
-        }
-
-        if (System_IsInInterrupt())
-        {
-            BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-            BaseType_t status = xTaskNotifyFromISR(LedTask, MUX_GPIO_TASK_EVENT_UPDATE, eSetBits, &xHigherPriorityTaskWoken);
-
-        }
-        else
-        {
-            BaseType_t status = xTaskNotify(LedTask, MUX_GPIO_TASK_EVENT_UPDATE, eSetBits);
-        }
-    }
-}
-
-void mux_gpio_mask_set(uint32_t mask)
-{
-    Atomic_OR_u32(&mux_gpio_value, mask);
-
-    //TODO: check interrupt context and check return value
-    BaseType_t status = xTaskNotify(LedTask, MUX_GPIO_TASK_EVENT_UPDATE, eSetBits);
-}
-
-void mux_gpio_mask_clear(uint32_t mask)
-{
-    Atomic_AND_u32(&mux_gpio_value, ~mask);
-
-    //TODO: check interrupt context and check return value
-    BaseType_t status = xTaskNotify(LedTask, MUX_GPIO_TASK_EVENT_UPDATE, eSetBits);
-}
-
 #define MUX_ALARM_NUMBER        (0)
 #define MUX_TIMER_IRQ           (TIMER_IRQ_0)
 #define MUX_SHIFT_GPIO_NUMBER   (13)
 #define MUX_TIMER_MAX_TIMEOUT   (5) //in ticks
 #define MUX_TIMER_ALARM_TIMEOUT (5)
-
-static void Mux_ShiftDelay(void)
-{
-    for (uint32_t i = 0; i < 64; i++)
-    {
-        portNOP();
-    }
-}
-
-void LedTaskThread (void *pParams)
-{
-    gpio_init(SHIFT_LED_CLK_GPIO);
-    gpio_set_dir(SHIFT_LED_CLK_GPIO, GPIO_OUT);
-    gpio_put(SHIFT_LED_CLK_GPIO, 0);
-
-    gpio_init(SHIFT_LED_DATA_GPIO);
-    gpio_set_dir(SHIFT_LED_DATA_GPIO, GPIO_OUT);
-    gpio_put(SHIFT_LED_DATA_GPIO, 0);
-
-    gpio_init(SHIFT_LED_LATCH_GPIO);
-    gpio_set_dir(SHIFT_LED_LATCH_GPIO, GPIO_OUT);
-    gpio_put(SHIFT_LED_LATCH_GPIO, 0);
-
-    gpio_init(SHIFT_LED_OE_GPIO);
-    gpio_set_dir(SHIFT_LED_OE_GPIO, GPIO_OUT);
-    gpio_put(SHIFT_LED_OE_GPIO, 0);
-
-    while (1)
-    {
-        const uint32_t gpio_state = mux_gpio_value;
-        gpio_put(SHIFT_LED_LATCH_GPIO, 0);
-        Mux_ShiftDelay();
-
-        for (uint8_t i = 0; i < MUX_SHIFT_GPIO_NUMBER; i++)
-        {
-            gpio_put(SHIFT_LED_CLK_GPIO, 0);
-            gpio_put(SHIFT_LED_DATA_GPIO, (gpio_state >> i) & 0x01);
-            Mux_ShiftDelay();
-
-            gpio_put(SHIFT_LED_CLK_GPIO, 1);
-            Mux_ShiftDelay();
-        }
-        gpio_put(SHIFT_LED_LATCH_GPIO, 1);
-        xTaskNotifyWait(0, MUX_GPIO_TASK_EVENT_UPDATE | MUX_GPIO_TASK_EVENT_TIMEOUT, NULL, pdMS_TO_TICKS(1000));
-    }
-}
-
-
 
 void vApplicationStackOverflowHook( TaskHandle_t pxTask, char *pcTaskName )
 {
@@ -305,19 +183,29 @@ void vApplicationGetTimerTaskMemory( StaticTask_t **ppxTimerTaskTCBBuffer, Stack
 
 #include "bsp/board.h"
 
-void TestLedTaskThread (void *pParams)
+_Noreturn void TestLedTaskThread (void *pParams)
 {
     while(1)
     {
         //LogWarn("Led Task");
         //mux_gpio_mask_set(0xFFFF);
         //vTaskDelay(500);
-        mux_gpio_mask_clear(0x0000);
         vTaskDelay(500);
+        /*system_pin_set_value(PIN_TARGET_1_LED_ACT, true);
+        system_pin_set_value(PIN_TARGET_1_LED_ERR, true);
+        system_pin_set_value(PIN_TARGET_1_LED_SER, true);
+        vTaskDelay(500);
+        system_pin_set_value(PIN_TARGET_1_LED_ACT, false);
+        system_pin_set_value(PIN_TARGET_1_LED_ERR, false);
+        system_pin_set_value(PIN_TARGET_1_LED_SER, false);*/
+        LogWarn("Led Task");
     }
 }
 
-void LogTaskThread(void *pParams)
+QueueHandle_t cli_rx_queue;
+QueueHandle_t cli_tx_queue;
+
+_Noreturn void LogTaskThread(void *pParams)
 {
     char *message = NULL;
 
@@ -326,7 +214,14 @@ void LogTaskThread(void *pParams)
         message = System_ReceiveLog();
         if (message != NULL)
         {
-            printf("%s", message);
+            const uint32_t len = strlen(message);
+            for (uint32_t i = 0; i < len; i++)
+            {
+                const char character = *(message + i);
+                const uint16_t data = (i == (len - 1)) ? (0x8000 | (uint8_t)character) : (uint8_t)character;
+                //LogWarn("GDB putchar");
+                xQueueSend(cli_tx_queue, (void*)&data, SYSTEM_WAIT_DONT_BLOCK);
+            }
             MemManager_Free(message);
         }
     }
@@ -433,17 +328,23 @@ struct target_controller gdb_controller[2];
 QueueHandle_t rx_queue;
 QueueHandle_t tx_queue;
 
+StreamBufferHandle_t rx_stream;
+StreamBufferHandle_t tx_stream;
+
 void gdb_if_putchar(unsigned char c, int flush)
 {
     const uint16_t data = flush ? (0x8000 | (uint8_t)c) : (uint8_t)c;
     //LogWarn("GDB putchar");
-    xQueueSend(tx_queue, (void*)&data, SYSTEM_WAIT_DONT_BLOCK);
+    //xQueueSend(tx_queue, (void*)&data, SYSTEM_WAIT_DONT_BLOCK);
+
+    xStreamBufferSend(tx_stream, &data, sizeof(data), SYSTEM_WAIT_DONT_BLOCK);
 }
 
 unsigned char gdb_if_getchar(void)
 {
     unsigned char data;
-    xQueueReceive(rx_queue, &data, SYSTEM_WAIT_FOREVER);
+    //xQueueReceive(rx_queue, &data, SYSTEM_WAIT_FOREVER);
+    xStreamBufferReceive(rx_stream, &data, sizeof(data), SYSTEM_WAIT_FOREVER);
     return data;
 }
 
@@ -451,7 +352,8 @@ unsigned char gdb_if_getchar_to(int timeout)
 {
     uint8_t data = 0;
 
-    if (xQueueReceive(rx_queue, &data, pdMS_TO_TICKS(timeout)) != pdTRUE)
+    if (xStreamBufferReceive(rx_stream, &data, sizeof(data), pdMS_TO_TICKS(timeout)) != sizeof(data))
+    //if (xQueueReceive(rx_queue, &data, pdMS_TO_TICKS(timeout)) != pdTRUE)
     {
         return -1;
     }
@@ -461,26 +363,20 @@ unsigned char gdb_if_getchar_to(int timeout)
     }
 }
 
-void platform_srst_set_val(bool assert)
-{
-    if (assert)
-    {
-        Atomic_OR_u32(&mux_gpio_value, (1 << 12));
-    }
-    else
-    {
-        Atomic_AND_u32(&mux_gpio_value, ~(1 << 12));
-    }
-}
+#include "swdptap.h"
 
-void gdb_main_1(void *pParams)
+_Noreturn void gdb_main_1(void *pParams)
 {
     struct target_controller *controller = &(gdb_controller[0]);
     gdb_main_init_target_controller(controller);
-    controller->platform_srst_set_val = platform_srst_set_val;
 
+    platform_target_interface_non_iso_init(controller);
+
+    //controller->connect_assert_srst = true;
     add_pid_to_list();
 
+
+#if (USE_PIO == 0)
     gpio_init(TDI_PIN);
     gpio_set_dir(TDI_PIN, GPIO_OUT);
     gpio_put(TDI_PIN, 0);
@@ -498,6 +394,7 @@ void gdb_main_1(void *pParams)
     gpio_init(TMS_DIR_PIN);
     gpio_set_dir(TMS_DIR_PIN, GPIO_OUT);
     gpio_put(TMS_DIR_PIN, 0);
+#endif
 
     while (true)
     {
@@ -571,21 +468,24 @@ void main(void)
 {
     board_init();
 
+    system_pins_init();
+
     System_Init();
 
     MemManager_Init();
 
     device_config_init();
 
-    device_make_usb_descriptor(1);
+    device_make_usb_descriptor(2);
 
     BaseType_t status;
-    status = xTaskCreate(LedTaskThread,
+    /*status = xTaskCreate(LedTaskThread,
                                     "LEDTask",
                                     128,
                                     NULL,
                                     2,
-                                    &LedTask);
+                                    &LedTask);*/
+
 
     TaskHandle_t TestLedTask;
     status = xTaskCreate(TestLedTaskThread,
@@ -619,14 +519,23 @@ void main(void)
                          3,
                          &gdb_main_thread_1);
 
-    rx_queue = xQueueCreate(512, sizeof(char));
-    tx_queue = xQueueCreate(512, sizeof(uint16_t));
+
+    //rx_queue = xQueueCreate(512, sizeof(char));
+    //tx_queue = xQueueCreate(512, sizeof(uint16_t));
+
+    //cli_rx_queue = xQueueCreate(512, sizeof(char));
+    //cli_tx_queue = xQueueCreate(512, sizeof(uint16_t));
+
+    rx_stream = xStreamBufferCreate(512, sizeof(char));
+    tx_stream = xStreamBufferCreate(512, sizeof(uint16_t));
 
     usb_task_init();
 
-    usb_cdc_task_init(0, rx_queue, tx_queue);
+    usb_cdc_test_task_init(0, rx_stream, tx_stream);
+    //usb_cdc_task_init(0, rx_queue, tx_queue);
+    //usb_cdc_task_init(1, cli_rx_queue, cli_tx_queue);
 
-    vTaskCoreAffinitySet(LedTask, 0x01);
+    //vTaskCoreAffinitySet(LedTask, 0x01);
     vTaskCoreAffinitySet(TestLedTask, 0x01);
     //vTaskCoreAffinitySet(LogTask, 0x01);
     //vTaskCoreAffinitySet(EthTask, 0x01);

@@ -67,11 +67,15 @@ target_sources(RubyLink PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/board.c
         ${CMAKE_CURRENT_SOURCE_DIR}/gdb_if.c
         ${CMAKE_CURRENT_SOURCE_DIR}/platform.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/platform_target_interface_iso.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/platform_target_interface_non_iso.c
         ${CMAKE_CURRENT_SOURCE_DIR}/jtagtap.c
         ${CMAKE_CURRENT_SOURCE_DIR}/swdptap.c
         ${CMAKE_CURRENT_SOURCE_DIR}/timing.c
         ${CMAKE_CURRENT_SOURCE_DIR}/usb_descriptors.c
         ${CMAKE_CURRENT_SOURCE_DIR}/system_func.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/system_pins.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/mux_task.c
         ${CMAKE_CURRENT_SOURCE_DIR}/mem_manager.c
         ${CMAKE_CURRENT_SOURCE_DIR}/eeprom.c
         ${CMAKE_CURRENT_SOURCE_DIR}/device_config.c
@@ -83,9 +87,11 @@ target_sources(RubyLink PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/Internet/DHCP/dhcp.c
         )
 
-pico_generate_pio_header(RubyLink ${CMAKE_CURRENT_LIST_DIR}/pio/swd_dp_low_write.pio)
-pico_generate_pio_header(RubyLink ${CMAKE_CURRENT_LIST_DIR}/pio/swd_dp_low_access_write.pio)
-pico_generate_pio_header(RubyLink ${CMAKE_CURRENT_LIST_DIR}/pio/swd_dp_low_access_read.pio)
+pico_generate_pio_header(RubyLink ${CMAKE_CURRENT_LIST_DIR}/pio/target_interface_non_iso_swd_low_write.pio)
+pico_generate_pio_header(RubyLink ${CMAKE_CURRENT_LIST_DIR}/pio/target_interface_non_iso_swd_low_access_write.pio)
+pico_generate_pio_header(RubyLink ${CMAKE_CURRENT_LIST_DIR}/pio/target_interface_non_iso_swd_low_access_read.pio)
+pico_generate_pio_header(RubyLink ${CMAKE_CURRENT_LIST_DIR}/pio/target_interface_non_iso_swd_low_seq_out.pio)
+pico_generate_pio_header(RubyLink ${CMAKE_CURRENT_LIST_DIR}/pio/target_interface_non_iso_swd_low_seq_in.pio)
 
 target_link_libraries(RubyLink PUBLIC pico_stdlib hardware_spi hardware_i2c hardware_pio tinyusb_device tinyusb_board tinyusb_additions)
 target_link_libraries(RubyLink PUBLIC FreeRTOS-Kernel FreeRTOS-Kernel-Heap1)
@@ -94,5 +100,10 @@ get_target_property(DirDefs tinyusb_common_base INTERFACE_COMPILE_DEFINITIONS)
 list(FILTER DirDefs EXCLUDE REGEX [[^CFG_TUSB_OS=OPT_OS_PICO$]])
 set_property(TARGET tinyusb_common_base PROPERTY INTERFACE_COMPILE_DEFINITIONS ${DirDefs})
 target_compile_definitions(tinyusb_common_base INTERFACE CFG_TUSB_OS=OPT_OS_FREERTOS)
+
+IF(CMAKE_COMPILER_IS_GNUCC)
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0")
+    set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0")
+ENDIF(CMAKE_COMPILER_IS_GNUCC)
 
 pico_add_extra_outputs(RubyLink)

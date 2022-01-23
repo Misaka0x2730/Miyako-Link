@@ -181,10 +181,7 @@ static bool cmd_jtag_scan(target *t, int argc, char **argv)
 
 	if (tc->platform_get_voltage)
     {
-        uint32_t target_voltage = tc->platform_get_voltage(tc->target_interface_number);
-        char target_voltage_str[6];
-        snprintf(target_voltage_str, 6, "%d.%dV", target_voltage / 1000, target_voltage % 1000);
-        gdb_outf("Target voltage: %s\n", target_voltage_str);
+        gdb_outf("Target voltage: %s\n", tc->platform_get_voltage());
     }
 
 	if (argc > 1) {
@@ -242,10 +239,7 @@ bool cmd_swdp_scan(target *t, int argc, char **argv)
 
     if (tc->platform_get_voltage)
     {
-        uint32_t target_voltage = tc->platform_get_voltage(tc->target_interface_number);
-        char target_voltage_str[6];
-        snprintf(target_voltage_str, 6, "%d.%dV", target_voltage / 1000, target_voltage % 1000);
-        gdb_outf("Target voltage: %s\n", target_voltage_str);
+        gdb_outf("Target voltage: %s\n", tc->platform_get_voltage());
     }
 
     if(tc->connect_assert_srst)
@@ -284,6 +278,10 @@ bool cmd_swdp_scan(target *t, int argc, char **argv)
 bool cmd_frequency(target *t, int argc, char **argv)
 {
 	(void)t;
+    target_controller_t *tc = (target_controller_t*)argv[0];
+    argc--;
+    argv++;
+
 	if (argc == 2) {
 		char *p;
 		uint32_t frequency = strtol(argv[1], &p, 10);
@@ -295,13 +293,30 @@ bool cmd_frequency(target *t, int argc, char **argv)
 			frequency *= 1000*1000;
 			break;
 		}
-		platform_max_frequency_set(frequency);
+		tc->platform_max_frequency_set(tc, frequency);
 	}
-	uint32_t freq = platform_max_frequency_get();
+	const uint32_t freq = tc->platform_max_frequency_get(tc);
+
 	if (freq == FREQ_FIXED)
-		gdb_outf("SWJ freq fixed\n");
+    {
+        gdb_outf("SWJ frequency is fixed\n");
+    }
 	else
-		gdb_outf("Max SWJ freq %08" PRIx32 "\n", freq);
+    {
+        char *freq_format = "Hz";
+        float freq_value = (float)freq;
+
+        if (freq >= 1000*1000) {
+            freq_value /= 1000*1000;
+            freq_format = "MHz";
+        }
+        else if (freq >= 1000) {
+            freq_value /= 1000;
+            freq_format = "kHz";
+        }
+
+        gdb_outf("Max SWJ frequency is %.2f %s\n", freq_value, freq_format);
+    }
 	return true;
 
 }
@@ -414,28 +429,32 @@ static bool cmd_hard_srst(target *t, int argc, const char **argv)
 	(void)argv;
     target_controller_t *tc = (target_controller_t*)argv[0];
 	target_list_free(&(tc->target_list));
-	platform_srst_set_val(true);
-	platform_srst_set_val(false);
+	tc->platform_srst_set_val(true);
+    tc->platform_srst_set_val(false);
 	return true;
 }
 
 #ifdef PLATFORM_HAS_POWER_SWITCH
 static bool cmd_target_power(target *t, int argc, const char **argv)
 {
-	(void)t;
+    (void)t;
+    target_controller_t *tc = (target_controller_t*)argv[0];
+    argc--;
+    argv++;
+
 	if (argc == 1) {
 		gdb_outf("Target Power: %s\n",
-			 platform_target_get_power() ? "enabled" : "disabled");
+             tc->platform_target_get_power() ? "enabled" : "disabled");
 	} else if (argc == 2) {
 		bool want_enable = false;
 		if (parse_enable_or_disable(argv[1], &want_enable)) {
 			if (want_enable
-				&& !platform_target_get_power()
-				&& platform_target_voltage_sense() > POWER_CONFLICT_THRESHOLD) {
+				&& !tc->platform_target_get_power()
+				&& tc->platform_target_voltage_sense() > POWER_CONFLICT_THRESHOLD) {
 				/* want to enable target power, but VREF > 0.5V sensed -> cancel */
-				gdb_outf("Target already powered (%s)\n", platform_target_voltage());
+				gdb_outf("Target already powered (%s)\n", tc->platform_get_voltage());
 			} else {
-				platform_target_set_power(want_enable);
+				tc->platform_target_set_power(want_enable);
 				gdb_outf("%s target power\n", want_enable ? "Enabling" : "Disabling");
 			}
 		}

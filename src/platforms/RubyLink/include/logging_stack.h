@@ -76,9 +76,9 @@
 
     #elif LIBRARY_LOG_LEVEL == LOG_INFO
         /* Only INFO, WARNING and ERROR messages will be logged. */
-        #define LogError( message, ... )     SdkLog( "ERROR", __FILENAME__, __LINE__, message, ##__VA_ARGS__ )
-        #define LogWarn( message, ...  )     SdkLog( "WARN",  __FILENAME__, __LINE__, message, ##__VA_ARGS__ )
-        #define LogInfo( message, ...  )     SdkLog( "INFO",  __FILENAME__, __LINE__, message, ##__VA_ARGS__ )
+        #define LogError( message, ... )     SdkLog( "ERROR", message, __FILENAME__, __LINE__, ##__VA_ARGS__ )
+        #define LogWarn( message, ...  )     SdkLog( "WARN",  message, __FILENAME__, __LINE__, ##__VA_ARGS__ )
+        #define LogInfo( message, ...  )     SdkLog( "INFO",  message, __FILENAME__, __LINE__, ##__VA_ARGS__ )
         #define LogDebug( message, ... )
 
     #elif LIBRARY_LOG_LEVEL == LOG_WARN

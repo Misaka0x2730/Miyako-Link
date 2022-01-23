@@ -29,6 +29,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <sys/types.h>
+#include "adiv5.h"
+#include "platform.h"
 #include "jtagtap.h"
 
 typedef struct target_s target;
@@ -187,10 +189,31 @@ struct target_controller {
     bool connect_assert_srst;
     unsigned cortexm_wait_timeout; /* Timeout to wait for Cortex to react on halt command. */
 
-    uint32_t target_interface_number;
-    int32_t (*platform_get_voltage)(uint32_t interface);
-    void (*platform_srst_set_val)(bool assert);
+    const char* (*platform_get_voltage)(void);
 
+    void (*platform_srst_set_val)(bool assert);
+    bool (*platform_srst_get_val)(void);
+
+    void (*platform_target_set_power)(bool power);
+    bool (*platform_target_get_power)(void);
+    uint32_t (*platform_target_voltage_sense)(void);
+
+    void (*platform_target_set_idle_state)(bool state);
+    void (*platform_target_set_error_state)(bool state);
+
+    void (*platform_max_frequency_set)(struct target_controller *tc, uint32_t frequency);
+    uint32_t (*platform_max_frequency_get)(struct target_controller *tc);
+
+    target_interface_param_t target_interface_param;
+
+	uint32_t (*swdptap_seq_in)(struct target_controller *tc, int ticks);
+	bool (*swdptap_seq_in_parity)(struct target_controller *tc, uint32_t *ret, int ticks);
+	void (*swdptap_seq_out)(struct target_controller *tc, uint32_t MS, int ticks);
+	void (*swdptap_seq_out_parity)(struct target_controller *tc, uint32_t MS, int ticks);
+
+    bool (*swdptap_low_write)(ADIv5_DP_t *dp, uint16_t addr, const uint32_t data);
+    uint32_t (*swdptap_low_access)(ADIv5_DP_t *dp, uint8_t RnW,
+                                      uint16_t addr, uint32_t value);
     struct jtag_proc_s jtag_proc;
 };
 

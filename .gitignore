@@ -3,3 +3,5 @@
 *.cproject
 *.settings
 *lib
+cmake-build-debug
+src/platforms/Izana
