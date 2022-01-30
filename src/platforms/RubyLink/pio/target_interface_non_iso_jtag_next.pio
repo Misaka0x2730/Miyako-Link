@@ -1,0 +1,17 @@
+.program target_interface_non_iso_jtag_next
+.side_set 1 opt
+
+pull
+out x, 1
+jmp !x tms_zero
+set pins, 1
+jmp cycle
+
+tms_zero:
+set pins, 0
+
+cycle:
+out pins, 1 side 1
+in pins, 1 side 0
+
+push

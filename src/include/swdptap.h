@@ -23,7 +23,5 @@
 
 #include "adiv5.h"
 
-int swdptap_init(ADIv5_DP_t *dp);
-
 #endif
 

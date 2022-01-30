@@ -214,6 +214,13 @@ struct target_controller {
     bool (*swdptap_low_write)(ADIv5_DP_t *dp, uint16_t addr, const uint32_t data);
     uint32_t (*swdptap_low_access)(ADIv5_DP_t *dp, uint8_t RnW,
                                       uint16_t addr, uint32_t value);
+
+    void (*jtagtap_reset)(struct target_controller *tc);
+    uint8_t (*jtagtap_next)(struct target_controller *tc, uint8_t dTMS, uint8_t dTDI);
+    void (*jtagtap_tms_seq)(struct target_controller *tc, uint32_t MS, int ticks);
+    void (*jtagtap_tdi_tdo_seq)(struct target_controller *tc, uint8_t *DO, const uint8_t final_tms, const uint8_t *DI, int ticks);
+    void (*jtagtap_tdi_seq)(struct target_controller *tc, const uint8_t final_tms, const uint8_t *DI, int ticks);
+
     struct jtag_proc_s jtag_proc;
 };
 

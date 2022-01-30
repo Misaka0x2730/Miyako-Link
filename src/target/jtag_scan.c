@@ -60,6 +60,7 @@ void jtag_add_device(const int dev_index, const jtag_dev_t *jtag_dev)
 int jtag_scan(jtag_proc_t* jtag_proc, const uint8_t *irlens)
 {
 	int i;
+    struct target_controller *tc = jtag_proc->tc;
 	void (*jd_handlers[JTAG_MAX_DEVS])(jtag_dev_t *jd);
 	target_list_free(&(jtag_proc->tc->target_list));
 
@@ -71,15 +72,15 @@ int jtag_scan(jtag_proc_t* jtag_proc, const uint8_t *irlens)
 	 * attached SWJ-DP is in SW-DP mode.
 	 */
 
-	jtag_proc->jtagtap_init();
+	jtag_proc->jtagtap_init(jtag_proc->tc);
 
-	jtag_proc->jtagtap_reset();
+	jtag_proc->jtagtap_reset(jtag_proc->tc);
 #define LOOPS 16
-	jtagtap_shift_ir(jtag_proc);
+	jtagtap_shift_ir();
 	i = LOOPS;
 	uint8_t ir_chain[64], *din = ir_chain;
 	while (i--) {
-		jtag_proc->jtagtap_tdi_tdo_seq(din, (i == 0) ? 1 : 0, ones,
+		jtag_proc->jtagtap_tdi_tdo_seq(tc, din, (i == 0) ? 1 : 0, ones,
 									  sizeof(ones) * 8);
 		din += sizeof(ones);
 	}
@@ -87,18 +88,18 @@ int jtag_scan(jtag_proc_t* jtag_proc, const uint8_t *irlens)
 		DEBUG_WARN("Unexpected IR chain!\n");
 		return 0;
 	}
-	jtagtap_return_idle(jtag_proc);
-	jtagtap_shift_dr(jtag_proc);
+	jtagtap_return_idle();
+	jtagtap_shift_dr();
 	i = LOOPS;
 	uint8_t zeros[] = {0, 0, 0, 0};
 	while(i--) {
-		jtag_proc->jtagtap_tdi_seq(0, zeros, sizeof(zeros) * 8);
+		jtag_proc->jtagtap_tdi_seq(tc, 0, zeros, sizeof(zeros) * 8);
 	}
 	int num_devices = 0;
-	while (!jtag_proc->jtagtap_next(0, 1) && (i++ < 6))
+	while (!jtag_proc->jtagtap_next(tc, 0, 1) && (i++ < 6))
 			num_devices++;
-	jtag_proc->jtagtap_reset();
-	jtagtap_shift_dr(jtag_proc);
+	jtag_proc->jtagtap_reset(tc);
+	jtagtap_shift_dr();
 	jtag_proc->jtag_dev_count = num_devices;
 	if (!num_devices)
 		return 0;
@@ -107,7 +108,7 @@ int jtag_scan(jtag_proc_t* jtag_proc, const uint8_t *irlens)
 	int j = 0;
 	for (i = 0; i < num_devices; i++) {
 		uint8_t id[4];
-		jtag_proc->jtagtap_tdi_tdo_seq(id, 0, ones, 32);
+		jtag_proc->jtagtap_tdi_tdo_seq(tc, id, 0, ones, 32);
 		if (!(id[0] & 1)) {
 			DEBUG_WARN("Invalid IDCode!\n");
 			return 0;
@@ -198,7 +199,7 @@ int jtag_scan(jtag_proc_t* jtag_proc, const uint8_t *irlens)
 				   idcode,jtag_devs[i].ir_len, jtag_devs[i].jd_descr,
 				   (jd_handlers[i]) ? "" : " (Unhandled) ");
 	}
-	jtag_proc->jtagtap_reset();
+	jtag_proc->jtagtap_reset(tc);
 	/* Fill in the ir_postscan fields */
 	for(i = jtag_proc->jtag_dev_count - 1; i; i--) {
 		jtag_devs[i-1].ir_postscan = jtag_devs[i].ir_postscan +
@@ -213,31 +214,33 @@ int jtag_scan(jtag_proc_t* jtag_proc, const uint8_t *irlens)
 	return jtag_proc->jtag_dev_count;
 }
 
-void jtag_dev_write_ir(jtag_proc_t *jp, uint8_t jd_index, uint32_t ir)
+void jtag_dev_write_ir(jtag_proc_t *jtag_proc, uint8_t jd_index, uint32_t ir)
 {
-	jtag_dev_t *d = &(jp->jtag_devs[jd_index]);
+	jtag_dev_t *d = &(jtag_proc->jtag_devs[jd_index]);
+    struct target_controller *tc = jtag_proc->tc;
 	if(ir == d->current_ir) return;
-	for(int i = 0; i < jp->jtag_dev_count; i++)
-        jp->jtag_devs[i].current_ir = -1;
+	for(int i = 0; i < jtag_proc->jtag_dev_count; i++)
+        jtag_proc->jtag_devs[i].current_ir = -1;
 	d->current_ir = ir;
 
-	jtagtap_shift_ir(jp);
-	jp->jtagtap_tdi_seq(0, ones, d->ir_prescan);
-	jp->jtagtap_tdi_seq(d->ir_postscan?0:1, (void*)&ir, d->ir_len);
-	jp->jtagtap_tdi_seq(1, ones, d->ir_postscan);
-	jtagtap_return_idle(jp);
+	jtagtap_shift_ir();
+    jtag_proc->jtagtap_tdi_seq(tc, 0, ones, d->ir_prescan);
+    jtag_proc->jtagtap_tdi_seq(tc, d->ir_postscan?0:1, (void*)&ir, d->ir_len);
+    jtag_proc->jtagtap_tdi_seq(tc, 1, ones, d->ir_postscan);
+	jtagtap_return_idle();
 }
 
-void jtag_dev_shift_dr(jtag_proc_t *jp, uint8_t jd_index, uint8_t *dout, const uint8_t *din, int ticks)
+void jtag_dev_shift_dr(jtag_proc_t *jtag_proc, uint8_t jd_index, uint8_t *dout, const uint8_t *din, int ticks)
 {
-	jtag_dev_t *d = &(jp->jtag_devs[jd_index]);
-	jtagtap_shift_dr(jp);
-	jp->jtagtap_tdi_seq(0, ones, d->dr_prescan);
+	jtag_dev_t *d = &(jtag_proc->jtag_devs[jd_index]);
+    struct target_controller *tc = jtag_proc->tc;
+	jtagtap_shift_dr();
+    jtag_proc->jtagtap_tdi_seq(tc, 0, ones, d->dr_prescan);
 	if(dout)
-		jp->jtagtap_tdi_tdo_seq((void*)dout, d->dr_postscan?0:1, (void*)din, ticks);
+        jtag_proc->jtagtap_tdi_tdo_seq(tc, (void*)dout, d->dr_postscan?0:1, (void*)din, ticks);
 	else
-		jp->jtagtap_tdi_seq(d->dr_postscan?0:1, (void*)din, ticks);
-	jp->jtagtap_tdi_seq(1, ones, d->dr_postscan);
-	jtagtap_return_idle(jp);
+        jtag_proc->jtagtap_tdi_seq(tc, d->dr_postscan?0:1, (void*)din, ticks);
+    jtag_proc->jtagtap_tdi_seq(tc, 1, ones, d->dr_postscan);
+	jtagtap_return_idle();
 }
 

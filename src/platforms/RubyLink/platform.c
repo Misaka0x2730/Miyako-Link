@@ -33,7 +33,7 @@
 #include "device_config.h"
 #include "system_pins.h"
 
-#include "hardware/pio.h"
+#include "hardware/uart.h"
 #include "platform_target_interface_non_iso.h"
 
 static float platform_calculate_pio_clkdiv(uint32_t frequency);
@@ -142,13 +142,20 @@ void platform_target_interface_non_iso_init(struct target_controller *tc)
         tc->swdptap_seq_in_parity = platform_target_interface_non_iso_seq_in_parity;
         tc->swdptap_low_write = platform_target_interface_non_iso_swd_low_write;
         tc->swdptap_low_access = platform_target_interface_non_iso_swd_low_access;
+        tc->jtagtap_next = platform_target_interface_non_iso_jtag_next;
+        tc->jtagtap_tms_seq = platform_target_interface_non_iso_jtag_tms_seq;
+        tc->jtagtap_tdi_tdo_seq = platform_target_interface_non_iso_jtag_tdi_tdo_seq;
+        tc->jtagtap_tdi_seq = platform_target_interface_non_iso_jtag_tdi_seq;
         tc->platform_max_frequency_set = platform_target_interface_max_frequency_set;
         tc->platform_max_frequency_get = platform_target_interface_max_frequency_get;
+        tc->jtag_proc.jtagtap_init = jtagtap_init;
 
         uint32_t frequency = 0;
         if (device_config_get_value(tc->target_interface_param.frequency_setting_id, (uint8_t*)&frequency, sizeof(frequency)) == sizeof(frequency))
         {
             platform_max_frequency_set(tc, frequency);
         }
+
+
     }
 }

@@ -1,0 +1,40 @@
+.program target_interface_non_iso_jtag_tdi_tdo_seq
+.side_set 1 opt
+
+pull
+mov y, OSR
+
+jmp !y tms_initial_zero
+set pins, 1
+jmp seq_start
+
+tms_initial_zero:
+set pins, 0
+
+seq_start:
+pull
+mov y, OSR
+
+pull
+mov x, OSR
+
+pull
+jmp !x start_final_cycle
+jmp x-- data_loop
+data_loop:
+    out pins, 1 side 1
+    in pins, 1 side 0
+    jmp x-- data_loop
+
+start_final_cycle:
+jmp !y final_tms_zero
+set pins, 1
+jmp final_cycle
+
+final_tms_zero:
+set pins, 0
+
+final_cycle:
+out pins, 1 side 1
+in pins, 1 side 0
+push noblock

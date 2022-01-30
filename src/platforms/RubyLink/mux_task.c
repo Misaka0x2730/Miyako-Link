@@ -100,6 +100,7 @@ void mux_pin_set(platform_pin_t pin, bool value)
             {
                 //TODO: assert
             }
+            portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
         }
         else
         {

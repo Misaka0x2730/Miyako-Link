@@ -22,7 +22,6 @@
 
 #include "general.h"
 #include "swdptap.h"
-#include "hardware/pio.h"
 
 int swdptap_init(ADIv5_DP_t *dp)
 {

@@ -35,10 +35,12 @@
 #include "task.h"
 #include "system_func.h"
 #include "hardware/gpio.h"
-#include "hardware/timer.h"
 #include "hardware/irq.h"
 #include "hardware/spi.h"
 #include "hardware/i2c.h"
+#include "hardware/uart.h"
+#include "hardware/dma.h"
+#include "hardware/timer.h"
 #include "atomic.h"
 #include "mem_manager.h"
 #include "device_config.h"
@@ -49,6 +51,7 @@
 
 #include "system_pins.h"
 #include "stream_buffer.h"
+#include "usb_uart_task.h"
 
 #define GDB_THREAD_NAME_LENGTH	(20)
 /*#define GDB_STACK_SIZE			(THREAD_STACKSIZE_LARGE*2)
@@ -198,7 +201,7 @@ _Noreturn void TestLedTaskThread (void *pParams)
         system_pin_set_value(PIN_TARGET_1_LED_ACT, false);
         system_pin_set_value(PIN_TARGET_1_LED_ERR, false);
         system_pin_set_value(PIN_TARGET_1_LED_SER, false);*/
-        LogWarn("Led Task");
+        //LogWarn("Led Task");
     }
 }
 
@@ -330,20 +333,23 @@ QueueHandle_t tx_queue;
 
 StreamBufferHandle_t rx_stream;
 StreamBufferHandle_t tx_stream;
+StreamBufferHandle_t line_coding_stream;
+
+StreamBufferHandle_t usb_uart_rx_stream;
+StreamBufferHandle_t usb_uart_tx_stream;
+StreamBufferHandle_t usb_uart_line_coding_stream;
+
+TaskHandle_t usb_cdc_task_handle = NULL;
 
 void gdb_if_putchar(unsigned char c, int flush)
 {
     const uint16_t data = flush ? (0x8000 | (uint8_t)c) : (uint8_t)c;
-    //LogWarn("GDB putchar");
-    //xQueueSend(tx_queue, (void*)&data, SYSTEM_WAIT_DONT_BLOCK);
-
     xStreamBufferSend(tx_stream, &data, sizeof(data), SYSTEM_WAIT_DONT_BLOCK);
 }
 
 unsigned char gdb_if_getchar(void)
 {
     unsigned char data;
-    //xQueueReceive(rx_queue, &data, SYSTEM_WAIT_FOREVER);
     xStreamBufferReceive(rx_stream, &data, sizeof(data), SYSTEM_WAIT_FOREVER);
     return data;
 }
@@ -353,7 +359,6 @@ unsigned char gdb_if_getchar_to(int timeout)
     uint8_t data = 0;
 
     if (xStreamBufferReceive(rx_stream, &data, sizeof(data), pdMS_TO_TICKS(timeout)) != sizeof(data))
-    //if (xQueueReceive(rx_queue, &data, pdMS_TO_TICKS(timeout)) != pdTRUE)
     {
         return -1;
     }
@@ -464,6 +469,476 @@ void vApplicationIdleHook( void )
 {
     //LogWarn("Idle");
 }
+
+static SemaphoreHandle_t usb_uart_mutex;
+
+/*_Noreturn void usb_uart_rx_thread(void *pParams)
+{
+    while(1)
+    {
+
+    }
+}*/
+
+_Noreturn void usb_uart_rx_thread(void *pParams)
+{
+    StreamBufferHandle_t usb_uart_thread_rx_stream = *(StreamBufferHandle_t*)pParams;
+    char data = 0;
+
+    while(1)
+    {
+        const size_t received_bytes = xStreamBufferReceive(usb_uart_thread_rx_stream, &data, sizeof(data),pdMS_TO_TICKS(25));
+        if (received_bytes > 0)
+        {
+            system_pin_set(PIN_TARGET_1_LED_SER);
+            if (uart_is_enabled(uart1))
+            {
+                uart_putc(uart1, data);
+            }
+            if (xStreamBufferBytesAvailable(usb_uart_thread_rx_stream) < sizeof(data))
+            {
+                system_pin_clear(PIN_TARGET_1_LED_SER);
+            }
+        }
+        else
+        {
+            system_pin_clear(PIN_TARGET_1_LED_SER);
+        }
+    }
+}
+
+int dma_chan1 = -1;
+int dma_chan2 = -1;
+
+__attribute__((aligned(256)))
+uint16_t uart1_data1_buf[2][128] = { 0 };
+
+bool dma_occured = false;
+
+bool timer_callback(repeating_timer_t *rt)
+{
+    static bool dma_flag_copy = false;
+    if (dma_occured)
+    {
+        /*if (dma_flag_copy == false)
+        {
+            dma_flag_copy = true;
+        }*/
+        dma_occured = false;
+        return true;
+    }
+    else
+    {
+        //if (dma_flag_copy)
+        {
+            dma_flag_copy = false;
+
+            hw_write_masked(&dma_channel_hw_addr(dma_chan1)->ctrl_trig, 0 << DMA_CH0_CTRL_TRIG_EN_MSB,
+                            DMA_CH0_CTRL_TRIG_EN_BITS);
+
+            hw_write_masked(&dma_channel_hw_addr(dma_chan2)->ctrl_trig, 0 << DMA_CH1_CTRL_TRIG_EN_MSB,
+                            DMA_CH1_CTRL_TRIG_EN_BITS);
+
+            uint32_t transfer_count = dma_channel_hw_addr(dma_chan1)->transfer_count;
+            size_t written_bytes = 0;
+            BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+
+            const uint32_t buf_size = 128 - transfer_count;
+            uint32_t byte_count = 0;
+            uint32_t total_bytes = 0;
+
+            if ((transfer_count < 128) && (transfer_count > 0))
+            {
+                if (dma_channel_hw_addr(dma_chan2)->transfer_count == 0)
+                {
+                    uart1_data1_buf[0][128 - transfer_count - 1] |= 0x8000;
+                }
+                written_bytes = xStreamBufferSendFromISR(usb_uart_tx_stream, uart1_data1_buf[0], (128 - transfer_count)*2, &xHigherPriorityTaskWoken);
+                if (written_bytes != buf_size)
+                {
+                    byte_count = 0;
+                }
+                else
+                {
+                    total_bytes += written_bytes;
+                }
+            }
+
+            transfer_count = dma_channel_hw_addr(dma_chan2)->transfer_count;
+            if ((transfer_count < 128) && (transfer_count > 0))
+            {
+                if (dma_channel_hw_addr(dma_chan1)->transfer_count == 0)
+                {
+                    uart1_data1_buf[1][128 - transfer_count - 1] |= 0x8000;
+                }
+                written_bytes = xStreamBufferSendFromISR(usb_uart_tx_stream, uart1_data1_buf[1], (128 - transfer_count)*2, &xHigherPriorityTaskWoken);
+                if (written_bytes != buf_size)
+                {
+                    byte_count = 0;
+                }
+                else
+                {
+                    total_bytes += written_bytes;
+                }
+            }
+
+            dma_channel_set_write_addr(dma_chan1, uart1_data1_buf[0], false);
+            dma_channel_set_trans_count(dma_chan1, 128, false);
+
+            dma_channel_set_write_addr(dma_chan2, uart1_data1_buf[1], false);
+            dma_channel_set_trans_count(dma_chan2, 128, false);
+
+            dma_channel_set_irq0_enabled(dma_chan1, false);
+            dma_channel_set_irq0_enabled(dma_chan2, false);
+
+            dma_channel_abort(dma_chan1);
+            dma_channel_abort(dma_chan2);
+
+            hw_write_masked(&uart_get_hw(uart1)->dmacr, 0 << UART_UARTDMACR_RXDMAE_MSB,
+                            UART_UARTDMACR_RXDMAE_BITS);
+
+            uart_set_irq_enables(uart1, true, false);
+
+            return false;
+        }
+        return true;
+    }
+}
+
+repeating_timer_t timer_test;
+
+void dma1_handler();
+
+void on_uart_rx()
+{
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    uint16_t buf[8] = { 0 };
+    const uint8_t buf_length = sizeof(buf)/sizeof(buf[0]);
+    const uint8_t buf_size = sizeof(buf);
+    uint8_t byte_count = 0;
+    size_t written_bytes = 0;
+    static uint32_t total_bytes = 0;
+
+    system_pin_clear(PIN_TARGET_1_LED_SER);
+
+    uart_set_irq_enables(uart1, false, false);
+
+    memset(&timer_test, 0, sizeof(timer_test));
+    add_repeating_timer_ms(50, timer_callback, NULL, &timer_test);
+
+    //uart1_data1_buf[0][0] = uart_getc(uart1);
+
+    hw_write_masked(&uart_get_hw(uart1)->dmacr, 1 << UART_UARTDMACR_RXDMAE_MSB,
+                    UART_UARTDMACR_RXDMAE_BITS);
+
+    /*hw_write_masked(&dma_channel_hw_addr(dma_chan1)->al1_ctrl, 1 << DMA_CH0_CTRL_TRIG_EN_MSB,
+                    DMA_CH0_CTRL_TRIG_EN_BITS);
+    hw_write_masked(&dma_channel_hw_addr(dma_chan2)->ctrl_trig, 1 << DMA_CH1_CTRL_TRIG_EN_MSB,
+                    DMA_CH1_CTRL_TRIG_EN_BITS);
+
+    dma_channel_set_trans_count(dma_chan1, 127, false);
+    dma_channel_set_trans_count(dma_chan2, 128, false);
+
+    dma_channel_set_write_addr(dma_chan2, uart1_data1_buf[1], false);
+    dma_channel_set_write_addr(dma_chan1, uart1_data1_buf[0] + 2, false);*/
+
+    dma_channel_config dma_config1 = dma_channel_get_default_config(dma_chan1);
+    channel_config_set_transfer_data_size(&dma_config1, DMA_SIZE_16);
+    channel_config_set_read_increment(&dma_config1, false);
+    channel_config_set_write_increment(&dma_config1, true);
+    //
+    // channel_config_set_ring(&dma_config1, true, CAPTURE_RING_BITS);
+    channel_config_set_chain_to(&dma_config1, dma_chan2);
+    channel_config_set_dreq(&dma_config1, DREQ_UART1_RX);
+    // When done, start the other channel.
+    //channel_config_set_chain_to(&dma_config1, dma_chan2);
+    // Using interrupt channel 0
+    dma_channel_acknowledge_irq0(dma_chan1);
+    dma_channel_acknowledge_irq0(dma_chan2);
+    dma_channel_set_irq0_enabled(dma_chan1, true);
+    // Set IRQ handler.
+    irq_set_exclusive_handler(DMA_IRQ_0, dma1_handler);
+    irq_set_enabled(DMA_IRQ_0, true);
+    dma_channel_configure(dma_chan1, &dma_config1,
+                          uart1_data1_buf[0],   // dst
+                          &(uart_get_hw(uart1)->dr),  // src
+                          128,  // transfer count
+                          true            // start immediately
+    );
+
+    dma_channel_config dma_config2 = dma_channel_get_default_config(dma_chan2);
+    channel_config_set_transfer_data_size(&dma_config2, DMA_SIZE_16);
+    channel_config_set_read_increment(&dma_config2, false);
+    channel_config_set_write_increment(&dma_config2, true);
+    //
+    // channel_config_set_ring(&dma_config1, true, CAPTURE_RING_BITS);
+    channel_config_set_chain_to(&dma_config2, dma_chan1);
+    channel_config_set_dreq(&dma_config2, DREQ_UART1_RX);
+    // When done, start the other channel.
+    //channel_config_set_chain_to(&dma_config1, dma_chan2);
+    // Using interrupt channel 0
+    dma_channel_set_irq0_enabled(dma_chan2, true);
+    // Set IRQ handler.
+    dma_channel_configure(dma_chan2, &dma_config2,
+                          uart1_data1_buf[1],   // dst
+                          &(uart_get_hw(uart1)->dr),  // src
+                          128,  // transfer count
+                          false            // start immediately
+    );
+
+    //dma_channel_hw_addr(dma_chan1)->ctrl_trig = dma_channel_hw_addr(dma_chan1)->ctrl_trig;
+    //dma_channel_set_write_addr(dma_chan1, uart1_data1_buf[0] + 2, true);
+
+    /*hw_write_masked(&dma_channel_hw_addr(dma_chan1)->ctrl_trig, 1 << DMA_CH0_CTRL_TRIG_EN_MSB,
+                    DMA_CH0_CTRL_TRIG_EN_BITS);*/
+
+    /*hw_write_masked(&dma_channel_hw_addr(dma_chan2)->ctrl_trig, 1 << DMA_CH1_CTRL_TRIG_EN_MSB,
+                    DMA_CH1_CTRL_TRIG_EN_BITS);*/
+
+
+
+    /*uint32_t transfer_count = dma_channel_hw_addr(dma_chan1)->transfer_count;
+
+    if (transfer_count < 128)
+    {
+        written_bytes = xStreamBufferSendFromISR(usb_uart_tx_stream, uart1_data1_buf[0], 128 - transfer_count, &xHigherPriorityTaskWoken);
+        if (written_bytes != buf_size)
+        {
+            byte_count = 0;
+        }
+        else
+        {
+            total_bytes += written_bytes;
+        }
+    }
+    transfer_count = dma_channel_hw_addr(dma_chan2)->transfer_count;
+
+    if (transfer_count < 128)
+    {
+        written_bytes = xStreamBufferSendFromISR(usb_uart_tx_stream, uart1_data1_buf[1], 128 - transfer_count, &xHigherPriorityTaskWoken);
+        if (written_bytes != buf_size)
+        {
+            byte_count = 0;
+        }
+        else
+        {
+            total_bytes += written_bytes;
+        }
+    }*/
+
+
+    /*while (uart_is_readable(uart1))
+    {
+        buf[byte_count++] = uart_getc(uart1);
+        if (byte_count == buf_length) {
+            if (!uart_is_readable(uart1)) {
+                buf[byte_count - 1] |= 0x8000;
+            }
+            byte_count = 0;
+            written_bytes = xStreamBufferSendFromISR(usb_uart_tx_stream, buf, buf_size, &xHigherPriorityTaskWoken);
+            if (written_bytes != buf_size)
+            {
+                byte_count = 0;
+            }
+            else
+            {
+                total_bytes += written_bytes;
+            }
+            portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+        }
+    }
+    if (byte_count)
+    {
+        buf[byte_count - 1] |= 0x8000;
+        written_bytes = xStreamBufferSendFromISR(usb_uart_tx_stream, buf, byte_count * sizeof(buf[0]), &xHigherPriorityTaskWoken);
+        if (written_bytes != byte_count * sizeof(buf[0]))
+        {
+            byte_count = 0;
+        }
+        else
+        {
+            total_bytes += written_bytes;
+        }
+        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+    }*/
+}
+
+uint32_t current_write_buffer_index = 0;
+int test = 0;
+
+void dma1_handler()
+{
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    static uint32_t total_bytes = 0;
+
+    system_pin_set(PIN_TARGET_1_LED_SER);
+
+    dma_occured = true;
+
+    if (dma_channel_get_irq0_status(dma_chan1))
+    {
+        dma_channel_acknowledge_irq0(dma_chan1);
+        dma_channel_set_write_addr(dma_chan1, uart1_data1_buf[0], false);
+        dma_channel_set_trans_count(dma_chan1, 128, false);
+
+        size_t written_bytes = xStreamBufferSendFromISR(usb_uart_tx_stream, uart1_data1_buf[0], 256, &xHigherPriorityTaskWoken);
+        if (written_bytes != 256)
+        {
+            test = 0;
+        }
+        else
+        {
+            total_bytes += written_bytes;
+        }
+        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+    }
+    else if (dma_channel_get_irq0_status(dma_chan2))
+    {
+        dma_channel_acknowledge_irq0(dma_chan2);
+        dma_channel_set_write_addr(dma_chan2, uart1_data1_buf[1], false);
+        dma_channel_set_trans_count(dma_chan2, 128, false);
+
+        const uint32_t test1 = dma_channel_hw_addr(dma_chan1)->transfer_count;
+        size_t written_bytes = xStreamBufferSendFromISR(usb_uart_tx_stream, uart1_data1_buf[1], 256, &xHigherPriorityTaskWoken);
+        if (written_bytes != 256)
+        {
+            test = 0;
+        }
+        else
+        {
+            total_bytes += written_bytes;
+        }
+        const uint32_t test2 = dma_channel_hw_addr(dma_chan1)->transfer_count;
+        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+    }
+    else
+    {
+        //TODO: assert
+        test = 1;
+    }
+}
+
+/*_Noreturn void usb_uart_line_coding_thread(void *pParams)
+{
+    StreamBufferHandle_t usb_uart_thread_line_coding_stream = *(StreamBufferHandle_t*)pParams;
+    cdc_line_coding_t line_coding;
+
+    while(1)
+    {
+        const size_t received_bytes = xStreamBufferReceive(usb_uart_thread_line_coding_stream, &line_coding, sizeof(line_coding), SYSTEM_WAIT_FOREVER);
+        if (received_bytes == sizeof(line_coding))
+        {
+            if (dma_chan1 != -1)
+            {
+                //channel_config_set_enable()
+                dma_channel_unclaim(dma_chan1);
+            }
+            else
+            {
+                //add_repeating_timer_ms(-10, timer_callback, NULL, &timer_test);
+            }
+
+            if (dma_chan2 != -1)
+            {
+                dma_channel_unclaim(dma_chan2);
+            }
+
+            dma_chan1 = dma_claim_unused_channel(true);
+            dma_chan2 = dma_claim_unused_channel(true);
+
+            // Chan 1
+            {
+                dma_channel_config dma_config1 = dma_channel_get_default_config(dma_chan1);
+                channel_config_set_transfer_data_size(&dma_config1, DMA_SIZE_16);
+                channel_config_set_read_increment(&dma_config1, false);
+                channel_config_set_write_increment(&dma_config1, true);
+                //
+                // channel_config_set_ring(&dma_config1, true, CAPTURE_RING_BITS);
+                channel_config_set_chain_to(&dma_config1, dma_chan2);
+                channel_config_set_dreq(&dma_config1, DREQ_UART1_RX);
+                // When done, start the other channel.
+                //channel_config_set_chain_to(&dma_config1, dma_chan2);
+                // Using interrupt channel 0
+                dma_channel_set_irq0_enabled(dma_chan1, true);
+                // Set IRQ handler.
+                irq_set_exclusive_handler(DMA_IRQ_0, dma1_handler);
+                irq_set_enabled(DMA_IRQ_0, true);
+                dma_channel_configure(dma_chan1, &dma_config1,
+                                      uart1_data1_buf[0],   // dst
+                                      &(uart_get_hw(uart1)->dr),  // src
+                                      128,  // transfer count
+                                      false            // start immediately
+                );
+
+                dma_channel_config dma_config2 = dma_channel_get_default_config(dma_chan2);
+                channel_config_set_transfer_data_size(&dma_config2, DMA_SIZE_16);
+                channel_config_set_read_increment(&dma_config2, false);
+                channel_config_set_write_increment(&dma_config2, true);
+                //
+                // channel_config_set_ring(&dma_config1, true, CAPTURE_RING_BITS);
+                channel_config_set_chain_to(&dma_config2, dma_chan1);
+                channel_config_set_dreq(&dma_config2, DREQ_UART1_RX);
+                // When done, start the other channel.
+                //channel_config_set_chain_to(&dma_config1, dma_chan2);
+                // Using interrupt channel 0
+                dma_channel_set_irq0_enabled(dma_chan2, true);
+                // Set IRQ handler.
+                dma_channel_configure(dma_chan2, &dma_config2,
+                                      uart1_data1_buf[1],   // dst
+                                      &(uart_get_hw(uart1)->dr),  // src
+                                      128,  // transfer count
+                                      false            // start immediately
+                );
+            }*/
+
+            // Chan 2
+            //{
+               /* dma_channel_config dma_config2 = dma_channel_get_default_config(dma_chan2);
+                channel_config_set_transfer_data_size(&dma_config2, DMA_SIZE_16);
+                channel_config_set_read_increment(&dma_config2, false);
+                channel_config_set_write_increment(&dma_config2, true);
+                channel_config_set_ring(&dma_config2, true, CAPTURE_RING_BITS);
+                channel_config_set_dreq(&dma_config2, DREQ_ADC);
+                // When done, start the other channel.
+                channel_config_set_chain_to(&dma_config2, dma_chan1);
+                dma_channel_set_irq1_enabled(dma_chan2, true);
+                irq_set_exclusive_handler(DMA_IRQ_1, dma_handler2);
+                irq_set_enabled(DMA_IRQ_1, true);
+                dma_channel_configure(dma_chan2, &dma_config2,
+                                      capture_buf2,   // dst
+                                      &adc_hw->fifo,  // src
+                                      CAPTURE_DEPTH,  // transfer count
+                                      false           // Do not start immediately*/
+
+            /*portENTER_CRITICAL();
+            uart_deinit(uart1);
+            portEXIT_CRITICAL();
+
+            uart_init(uart1, line_coding.bit_rate);
+            uart_set_hw_flow(uart1, false, false);
+            uart_set_format(uart1, line_coding.data_bits, line_coding.stop_bits + 1, line_coding.parity);
+
+            irq_set_exclusive_handler(UART1_IRQ, on_uart_rx);
+            irq_set_enabled(UART1_IRQ, true);
+
+            //uart_set_fifo_enabled(uart1, false);
+            uart_set_irq_enables(uart1, true, false);
+
+            //hw_write_masked(&uart_get_hw(uart1)->imsc, 1 << UART_UARTIMSC_RTIM_MSB,
+            //                UART_UARTIMSC_RTIM_BITS);
+            hw_write_masked(&uart_get_hw(uart1)->dmacr, 0 << UART_UARTDMACR_RXDMAE_MSB,
+                            UART_UARTDMACR_RXDMAE_BITS);
+
+            hw_write_masked(&dma_channel_hw_addr(dma_chan1)->ctrl_trig, 0 << DMA_CH0_CTRL_TRIG_EN_MSB,
+                            DMA_CH0_CTRL_TRIG_EN_BITS);
+
+            hw_write_masked(&dma_channel_hw_addr(dma_chan2)->ctrl_trig, 0 << DMA_CH1_CTRL_TRIG_EN_MSB,
+                            DMA_CH1_CTRL_TRIG_EN_BITS);
+
+        }
+    }
+}*/
+
 void main(void)
 {
     board_init();
@@ -516,7 +991,7 @@ void main(void)
                          "gdb_main_thread_1",
                          4096,
                          NULL,
-                         3,
+                         SYSTEM_PRIORITY_NORMAL,
                          &gdb_main_thread_1);
 
 
@@ -528,10 +1003,26 @@ void main(void)
 
     rx_stream = xStreamBufferCreate(512, sizeof(char));
     tx_stream = xStreamBufferCreate(512, sizeof(uint16_t));
+    line_coding_stream = xStreamBufferCreate(sizeof(cdc_line_coding_t)*5, sizeof(cdc_line_coding_t));
+
+    // And set up and enable the interrupt handlers
+    //irq_set_exclusive_handler(UART1_IRQ, on_uart_rx);
+    //irq_set_enabled(UART1_IRQ, true);
+
+    // Now enable the UART to send interrupts - RX only
+    //uart_set_irq_enables(uart1, true, false);
 
     usb_task_init();
 
-    usb_cdc_test_task_init(0, rx_stream, tx_stream);
+    usb_cdc_test_task_init(0, "usb_gdb_rx_thread", "usb_gdb_tx_thread", rx_stream, tx_stream, line_coding_stream);
+
+    gpio_set_function(PIN_TARGET1_TX, GPIO_FUNC_UART);
+    gpio_set_function(PIN_TARGET1_RX, GPIO_FUNC_UART);
+
+    usb_uart_init();
+    usb_uart_add_interface(0);
+
+    //usb_cdc_test_task_init(0, "usb_uart_rx_thread", "usb_uart_tx_thread", usb_uart_rx_stream, usb_uart_tx_stream);
     //usb_cdc_task_init(0, rx_queue, tx_queue);
     //usb_cdc_task_init(1, cli_rx_queue, cli_tx_queue);
 

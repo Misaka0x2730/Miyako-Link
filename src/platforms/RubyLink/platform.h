@@ -37,6 +37,8 @@ typedef enum
     PLATFORM_TARGET_INTERFACE_SWD
 } platform_target_interface_mode_t;
 
+#define PLATFORM_USB_UART_INTERFACE_NUM   (2)
+
 //TODO: change to thread-safe variant
 
 //#define PLATFORM_HAS_TRACESWO
@@ -83,7 +85,8 @@ typedef enum
 #define SWDIO_DIR_PIN	TMS_DIR_PIN
 
 
-#define USE_PIO (1)
+#define USE_PIO     (1)
+#define PIO_JTAG    (1)
 
 #define PIO_MIN_FREQUENCY                       (1000)
 #define PIO_MAX_FREQUENCY                       (40000000)
@@ -108,8 +111,15 @@ typedef enum
     PIO_PROGRAM_SWD_DP_LOW_ACCESS_WRITE,
     PIO_PROGRAM_SWD_DP_LOW_SEQ_OUT,
     PIO_PROGRAM_SWD_DP_LOW_SEQ_IN,
-    PIO_PROGRAM_SWD_DP_LOW_WRITE
+    PIO_PROGRAM_SWD_DP_LOW_WRITE,
+    PIO_PROGRAM_JTAG_DP_TDI_TDO_SEQ,
+    PIO_PROGRAM_JTAG_DP_TDI_SEQ,
+    PIO_PROGRAM_JTAG_DP_TMS_SEQ,
+    PIO_PROGRAM_JTAG_DP_NEXT
 } target_interface_pio_program_t;
+
+#define TARGET_INTERFACE_PROGRAM_IS_SWD(program)    (((program) >= PIO_PROGRAM_SWD_DP_LOW_ACCESS_READ) && ((program) <= PIO_PROGRAM_SWD_DP_LOW_WRITE))
+#define TARGET_INTERFACE_PROGRAM_IS_JTAG(program)   (((program) >= PIO_PROGRAM_JTAG_DP_TDI_TDO_SEQ) && ((program) <= PIO_PROGRAM_JTAG_DP_NEXT))
 
 typedef enum {
     TARGET_INTERFACE_TMS_DIR_NOT_INITIALIZED = 0,

@@ -81,6 +81,7 @@ target_sources(RubyLink PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/device_config.c
         ${CMAKE_CURRENT_SOURCE_DIR}/usb_task.c
         ${CMAKE_CURRENT_SOURCE_DIR}/usb_cdc_task.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/usb_uart_task.c
         ${CMAKE_CURRENT_SOURCE_DIR}/Ethernet/socket.c
         ${CMAKE_CURRENT_SOURCE_DIR}/Ethernet/wizchip_conf.c
         ${CMAKE_CURRENT_SOURCE_DIR}/Ethernet/W5500/w5500.c
@@ -93,7 +94,11 @@ pico_generate_pio_header(RubyLink ${CMAKE_CURRENT_LIST_DIR}/pio/target_interface
 pico_generate_pio_header(RubyLink ${CMAKE_CURRENT_LIST_DIR}/pio/target_interface_non_iso_swd_low_seq_out.pio)
 pico_generate_pio_header(RubyLink ${CMAKE_CURRENT_LIST_DIR}/pio/target_interface_non_iso_swd_low_seq_in.pio)
 
-target_link_libraries(RubyLink PUBLIC pico_stdlib hardware_spi hardware_i2c hardware_pio tinyusb_device tinyusb_board tinyusb_additions)
+pico_generate_pio_header(RubyLink ${CMAKE_CURRENT_LIST_DIR}/pio/target_interface_non_iso_jtag_tdi_tdo_seq.pio)
+pico_generate_pio_header(RubyLink ${CMAKE_CURRENT_LIST_DIR}/pio/target_interface_non_iso_jtag_next.pio)
+
+target_link_libraries(RubyLink PUBLIC hardware_spi hardware_i2c hardware_pio hardware_uart hardware_dma hardware_timer)
+target_link_libraries(RubyLink PUBLIC pico_stdlib tinyusb_device tinyusb_board tinyusb_additions)
 target_link_libraries(RubyLink PUBLIC FreeRTOS-Kernel FreeRTOS-Kernel-Heap1)
 
 get_target_property(DirDefs tinyusb_common_base INTERFACE_COMPILE_DEFINITIONS)

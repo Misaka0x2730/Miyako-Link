@@ -24,37 +24,55 @@
 
 #include "general.h"
 #include "jtagtap.h"
+#include "adiv5.h"
 #include "gdb_packet.h"
 
-jtag_proc_t jtag_proc;
+void jtagtap_reset(struct target_controller *tc);
 
-int jtagtap_init(void)
+void jtagtap_init(struct target_controller *tc)
 {
-	return 0;
+    //struct target_controller_s *tc = dp->tc;
+    struct jtag_proc_s *jtag_proc = &(tc->jtag_proc);
+
+    tc->jtag_proc.jtagtap_reset = jtagtap_reset;
+    tc->jtag_proc.jtagtap_next = tc->jtagtap_next;
+    tc->jtag_proc.jtagtap_tms_seq = tc->jtagtap_tms_seq;
+    tc->jtag_proc.jtagtap_tdi_tdo_seq = tc->jtagtap_tdi_tdo_seq;
+    tc->jtag_proc.jtagtap_tdi_seq = tc->jtagtap_tdi_seq;
+
+#if (PIO_JTAG == 0)
+    gpio_init(PIN_TARGET1_TCK);
+    gpio_set_dir(PIN_TARGET1_TCK, GPIO_OUT);
+    gpio_put(PIN_TARGET1_TCK, 0);
+
+    gpio_init(PIN_TARGET1_TDI);
+    gpio_set_dir(PIN_TARGET1_TDI, GPIO_OUT);
+    gpio_put(PIN_TARGET1_TDI, 0);
+
+    gpio_init(PIN_TARGET1_TDO);
+    gpio_set_dir(PIN_TARGET1_TDO, GPIO_IN);
+
+    gpio_init(PIN_TARGET1_TMS_DIR_PIN);
+    gpio_set_dir(PIN_TARGET1_TMS_DIR_PIN, GPIO_OUT);
+    gpio_put(PIN_TARGET1_TMS_DIR_PIN, 1);
+
+    gpio_init(PIN_TARGET1_TMS);
+    gpio_set_dir(PIN_TARGET1_TMS, GPIO_OUT);
+    gpio_put(PIN_TARGET1_TMS, 0);
+#endif
+    /* Go to JTAG mode for SWJ-DP */
+    for(int i = 0; i <= 50; i++)
+    {
+        tc->jtag_proc.jtagtap_next(tc, 1, 0); /* Reset SW-DP */
+    }
+    tc->jtag_proc.jtagtap_tms_seq(tc, 0xE73C, 16);		/* SWD to JTAG sequence */
+    jtagtap_soft_reset();
 }
 
-void jtagtap_reset(void)
+void jtagtap_reset(struct target_controller *tc)
 {
+    struct jtag_proc_s *jtag_proc = &(tc->jtag_proc);
+
+    jtagtap_soft_reset();
 }
 
-inline uint8_t jtagtap_next(uint8_t dTMS, uint8_t dTDI)
-{
-	uint16_t ret;
-
-
-	return ret != 0;
-}
-
-void jtagtap_tms_seq(uint32_t MS, int ticks)
-{
-}
-
-void
-jtagtap_tdi_tdo_seq(uint8_t *DO, const uint8_t final_tms, const uint8_t *DI, int ticks)
-{
-}
-
-void
-jtagtap_tdi_seq(const uint8_t final_tms, const uint8_t *DI, int ticks)
-{
-}

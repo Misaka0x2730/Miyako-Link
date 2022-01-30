@@ -198,12 +198,12 @@ static void remotePacketProcessJTAG(unsigned i, char *packet)
 		remote_dp.dp_read = fw_adiv5_jtagdp_read;
 		remote_dp.low_access = fw_adiv5_jtagdp_low_access;
 		remote_dp.abort = adiv5_jtagdp_abort;
-		jtagtap_init();
+		jtagtap_init(remote_dp.tc);
 		_respond(REMOTE_RESP_OK, 0);
 		break;
 
     case REMOTE_RESET: /* JR = reset ================================= */
-		jtag_proc.jtagtap_reset();
+		jtag_proc.jtagtap_reset(remote_dp.tc);
 		_respond(REMOTE_RESP_OK, 0);
 		break;
 
@@ -214,7 +214,7 @@ static void remotePacketProcessJTAG(unsigned i, char *packet)
 		if (i<4) {
 			_respond(REMOTE_RESP_ERR,REMOTE_ERROR_WRONGLEN);
 		} else {
-			jtag_proc.jtagtap_tms_seq( MS, ticks);
+			jtag_proc.jtagtap_tms_seq(remote_dp.tc, MS, ticks);
 			_respond(REMOTE_RESP_OK, 0);
 		}
 		break;
@@ -227,7 +227,7 @@ static void remotePacketProcessJTAG(unsigned i, char *packet)
 		} else {
 			ticks=remotehston(2,&packet[2]);
 			DI=remotehston(-1,&packet[4]);
-			jtag_proc.jtagtap_tdi_tdo_seq((void *)&DO, (packet[1]==REMOTE_TDITDO_TMS), (void *)&DI, ticks);
+			jtag_proc.jtagtap_tdi_tdo_seq(remote_dp.tc, (void *)&DO, (packet[1]==REMOTE_TDITDO_TMS), (void *)&DI, ticks);
 
 			/* Mask extra bits on return value... */
 			if (ticks < 64)
@@ -241,7 +241,7 @@ static void remotePacketProcessJTAG(unsigned i, char *packet)
 		if (i!=4) {
 			_respond(REMOTE_RESP_ERR,REMOTE_ERROR_WRONGLEN);
 		} else {
-			uint32_t dat=jtag_proc.jtagtap_next( (packet[2]=='1'), (packet[3]=='1'));
+			uint32_t dat=jtag_proc.jtagtap_next(remote_dp.tc, (packet[2]=='1'), (packet[3]=='1'));
 			_respond(REMOTE_RESP_OK,dat);
 		}
 		break;

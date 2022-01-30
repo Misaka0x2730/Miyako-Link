@@ -21,4 +21,9 @@ bool platform_target_interface_non_iso_swd_low_write(ADIv5_DP_t *dp, uint16_t ad
 uint32_t platform_target_interface_non_iso_swd_low_access(ADIv5_DP_t *dp, uint8_t RnW,
                                                           uint16_t addr, uint32_t value);
 
+uint8_t platform_target_interface_non_iso_jtag_next(struct target_controller *tc, uint8_t dTMS, uint8_t dTDI);
+void platform_target_interface_non_iso_jtag_tms_seq(struct target_controller *tc, uint32_t MS, int ticks);
+void platform_target_interface_non_iso_jtag_tdi_tdo_seq(struct target_controller *tc, uint8_t *DO, const uint8_t final_tms, const uint8_t *DI, int ticks);
+void platform_target_interface_non_iso_jtag_tdi_seq(struct target_controller *tc, const uint8_t final_tms, const uint8_t *DI, int ticks);
+
 #endif // __PLATFORM_TARGET_INTERFACE_NON_ISO_H
