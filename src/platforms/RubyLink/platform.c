@@ -32,6 +32,8 @@
 #include "task.h"
 #include "device_config.h"
 #include "system_pins.h"
+#include "hardware/structs/systick.h"
+#include "hardware/structs/scb.h"
 
 #include "hardware/uart.h"
 #include "platform_target_interface_non_iso.h"
@@ -158,4 +160,34 @@ void platform_target_interface_non_iso_init(struct target_controller *tc)
 
 
     }
+}
+
+U32 SEGGER_SYSVIEW_X_GetTimestamp(void)
+{
+    /*U32 TickCount;
+    U32 Cycles;
+    U32 CyclesPerTick;
+    //
+    // Get the cycles of the current system tick.
+    // SysTick is down-counting, subtract the current value from the number of cycles per tick.
+    //
+    CyclesPerTick = systick_hw->rvr + 1;
+    Cycles = (CyclesPerTick - systick_hw->cvr);
+    //
+    // Get the system tick count.
+    //
+    TickCount = SEGGER_SYSVIEW_TickCnt;
+    //
+    // If a SysTick interrupt is pending, re-read timer and adjust result
+    //
+    if ((scb_hw->icsr & 0x04000000) != 0)
+    {
+        Cycles = (CyclesPerTick - systick_hw->cvr);
+        TickCount++;
+    }
+    Cycles += TickCount * CyclesPerTick;*/
+
+    return time_us_32();
+
+    //return Cycles;
 }

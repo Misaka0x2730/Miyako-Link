@@ -341,31 +341,83 @@ StreamBufferHandle_t usb_uart_line_coding_stream;
 
 TaskHandle_t usb_cdc_task_handle = NULL;
 
+unsigned char gdb_tx_buf[256] = { 0 };
+uint32_t gdb_tx_count = 0;
+
 void gdb_if_putchar(unsigned char c, int flush)
 {
-    const uint16_t data = flush ? (0x8000 | (uint8_t)c) : (uint8_t)c;
-    xStreamBufferSend(tx_stream, &data, sizeof(data), SYSTEM_WAIT_DONT_BLOCK);
+    gdb_tx_buf[gdb_tx_count++] = c;
+    if ((gdb_tx_count == sizeof(gdb_tx_buf)) || (flush))
+    {
+        //const uint16_t data = flush ? (0x8000 | (uint8_t)c) : (uint8_t)c;
+        xStreamBufferSend(tx_stream, gdb_tx_buf, gdb_tx_count, SYSTEM_WAIT_FOREVER);
+        gdb_tx_count = 0;
+    }
 }
+
+unsigned char gdb_rx_buf[256] = { 0 };
+uint32_t gdb_rx_count = 0;
+uint32_t gdb_rx_last_pos = 0;
 
 unsigned char gdb_if_getchar(void)
 {
     unsigned char data;
-    xStreamBufferReceive(rx_stream, &data, sizeof(data), SYSTEM_WAIT_FOREVER);
-    return data;
+    TickType_t timeout = pdMS_TO_TICKS(20);
+
+    if (gdb_rx_count)
+    {
+        gdb_rx_count--;
+        return gdb_rx_buf[gdb_rx_last_pos++];
+    }
+
+    if (xStreamBufferBytesAvailable(rx_stream) >= sizeof(data))
+    {
+        timeout = 0;
+    }
+
+    size_t received_bytes = 0;
+    do
+    {
+        received_bytes = xStreamBufferReceive(rx_stream, gdb_rx_buf, sizeof(gdb_rx_buf), timeout);
+    } while ((received_bytes == 0) && (timeout != 0));
+
+    gdb_rx_count = received_bytes - 1;
+    gdb_rx_last_pos = 1;
+    return gdb_rx_buf[0];
 }
 
 unsigned char gdb_if_getchar_to(int timeout)
 {
-    uint8_t data = 0;
+    unsigned char data = 0;
+    TickType_t stream_timeout = 20;
 
-    if (xStreamBufferReceive(rx_stream, &data, sizeof(data), pdMS_TO_TICKS(timeout)) != sizeof(data))
+    if (gdb_rx_count)
+    {
+        gdb_rx_count--;
+        return gdb_rx_buf[gdb_rx_last_pos++];
+    }
+
+    if (xStreamBufferBytesAvailable(rx_stream) >= sizeof(data))
+    {
+        timeout = 0;
+    }
+
+    size_t received_bytes = 0;
+    const uint32_t tries_limit = timeout / stream_timeout;
+    uint32_t tries = 0;
+    do
+    {
+        received_bytes = xStreamBufferReceive(rx_stream, gdb_rx_buf, sizeof(gdb_rx_buf), pdMS_TO_TICKS(stream_timeout));
+    } while ((received_bytes == 0) && (tries++ < tries_limit));
+
+    if (received_bytes == 0)
     {
         return -1;
     }
-    else
-    {
-        return data;
-    }
+
+    gdb_rx_count = received_bytes - 1;
+    gdb_rx_last_pos = 1;
+    return gdb_rx_buf[0];
 }
 
 #include "swdptap.h"
@@ -941,6 +993,8 @@ void dma1_handler()
 
 void main(void)
 {
+    traceSTART();
+
     board_init();
 
     system_pins_init();
@@ -989,7 +1043,7 @@ void main(void)
     TaskHandle_t gdb_main_thread_1;
     status = xTaskCreate(gdb_main_1,
                          "gdb_main_thread_1",
-                         4096,
+                         5192,
                          NULL,
                          SYSTEM_PRIORITY_NORMAL,
                          &gdb_main_thread_1);
@@ -1001,8 +1055,8 @@ void main(void)
     //cli_rx_queue = xQueueCreate(512, sizeof(char));
     //cli_tx_queue = xQueueCreate(512, sizeof(uint16_t));
 
-    rx_stream = xStreamBufferCreate(512, sizeof(char));
-    tx_stream = xStreamBufferCreate(512, sizeof(uint16_t));
+    rx_stream = xStreamBufferCreate(512, 256);
+    tx_stream = xStreamBufferCreate(512, 256);
     line_coding_stream = xStreamBufferCreate(sizeof(cdc_line_coding_t)*5, sizeof(cdc_line_coding_t));
 
     // And set up and enable the interrupt handlers

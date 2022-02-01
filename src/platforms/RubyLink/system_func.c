@@ -19,7 +19,7 @@ void System_Init(void)
     system_log_mutex = xSemaphoreCreateRecursiveMutex();
 }
 
-bool System_IsInInterrupt(void)
+inline bool System_IsInInterrupt(void)
 {
     return taskCHECK_IF_IN_ISR();
 }

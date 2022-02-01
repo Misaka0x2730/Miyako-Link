@@ -16,8 +16,9 @@
 
 typedef uint16_t usb_uart_element_t;
 
-#define UART_RX_BUF_SIZE            (128)
-#define UART_RX_BUF_SIZE_IN_BYTES   (UART_RX_BUF_SIZE*sizeof(usb_uart_element_t))
+#define UART_RX_BUF_SIZE            (1024)
+//#define UART_RX_BUF_SIZE_IN_BYTES   (UART_RX_BUF_SIZE*sizeof(usb_uart_element_t))
+#define UART_RX_BUF_SIZE_IN_BYTES   (UART_RX_BUF_SIZE*sizeof(char))
 #define UART_TX_BUF_SIZE            (UART_RX_BUF_SIZE)
 #define UART_TX_BUF_SIZE_IN_BYTES   (UART_TX_BUF_SIZE*sizeof(char))
 
@@ -30,7 +31,7 @@ typedef struct
     dma_channel_config dma_tx_config;
     uint32_t dma_irq;
     __attribute__((aligned(UART_RX_BUF_SIZE_IN_BYTES)))
-    usb_uart_element_t rx_buffer[2][UART_RX_BUF_SIZE];
+    char rx_buffer[2][UART_RX_BUF_SIZE];
     char tx_buffer[UART_TX_BUF_SIZE];
 
     uart_inst_t *uart;
@@ -104,6 +105,8 @@ void usb_uart_rx_callback(const uint8_t channel)
 
 void usb_uart_dma_handler(void)
 {
+    traceISR_ENTER();
+
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     static uint32_t total_bytes = 0;
 
@@ -171,8 +174,10 @@ void usb_uart_dma_handler(void)
             hw_write_masked(&uart_get_hw(config->uart)->dmacr, 0,
                             UART_UARTDMACR_TXDMAE_BITS);
             xTaskNotifyFromISR(config->tx_thread, USB_UART_TASK_TX_COMPLETE, eSetBits, &xHigherPriorityTaskWoken);
+            portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
         }
     }
+    traceISR_EXIT();
 }
 
 bool usb_uart_timeout_callback(const uint8_t channel)
@@ -218,7 +223,7 @@ bool usb_uart_timeout_callback(const uint8_t channel)
             {
                 if (dma_channel_hw_addr(dma_paired_channel)->transfer_count == 0)
                 {
-                    config->rx_buffer[i][count_to_write - 1] |= 0x8000;
+                    //config->rx_buffer[i][count_to_write - 1] |= 0x8000;
                 }
 
                 size_t written_bytes = xStreamBufferSendFromISR(usb_uart_config_list[channel].rx_stream,
@@ -242,12 +247,17 @@ bool usb_uart_timeout_callback(const uint8_t channel)
 
 void usb_uart_1_rx_interrupt(void)
 {
+    traceISR_ENTER();
     usb_uart_rx_callback(0);
+    traceISR_EXIT();
 }
 
 bool usb_uart_1_timeout_interrupt(void)
 {
-    return usb_uart_timeout_callback(0);
+    traceISR_ENTER();
+    const bool retVal = usb_uart_timeout_callback(0);
+    traceISR_EXIT();
+    return retVal;
 }
 
 void usb_uart_init(void)
@@ -284,11 +294,11 @@ void usb_uart_add_interface(uint8_t channel)
 
     usb_uart_config_list[channel].serial_led = usb_uart_led_list[channel];
 
-    usb_uart_config_list[channel].tx_stream = xStreamBufferCreate(UART_TX_BUF_SIZE_IN_BYTES*4, UART_TX_BUF_SIZE_IN_BYTES);
+    usb_uart_config_list[channel].tx_stream = xStreamBufferCreate(UART_TX_BUF_SIZE_IN_BYTES*2, UART_TX_BUF_SIZE_IN_BYTES);
     usb_uart_config_list[channel].rx_stream = xStreamBufferCreate(UART_RX_BUF_SIZE_IN_BYTES*4, UART_RX_BUF_SIZE_IN_BYTES);
     usb_uart_config_list[channel].line_coding_stream = xStreamBufferCreate(sizeof(cdc_line_coding_t)*2, sizeof(cdc_line_coding_t));
 
-    usb_cdc_test_task_init(1, "usb_uart_rx_thread", "usb_uart_tx_thread", usb_uart_config_list[channel].tx_stream, usb_uart_config_list[channel].rx_stream, usb_uart_config_list[channel].line_coding_stream);
+    usb_cdc_test_task_init(1, "usb_uart_cdc_rx_thread", "usb_uart_cdc_tx_thread", usb_uart_config_list[channel].tx_stream, usb_uart_config_list[channel].rx_stream, usb_uart_config_list[channel].line_coding_stream);
 
     usb_uart_config_list[channel].dma_rx_channel[0] = dma_claim_unused_channel(true);
     usb_uart_config_list[channel].dma_rx_channel[1] = dma_claim_unused_channel(true);
@@ -323,7 +333,7 @@ void usb_uart_add_interface(uint8_t channel)
 
         *config = dma_channel_get_default_config(usb_uart_config_list[channel].dma_rx_channel[i]);
 
-        channel_config_set_transfer_data_size(config, DMA_SIZE_16);
+        channel_config_set_transfer_data_size(config, DMA_SIZE_8);
         channel_config_set_read_increment(config, false);
         channel_config_set_write_increment(config, true);
 
@@ -338,7 +348,7 @@ void usb_uart_add_interface(uint8_t channel)
 
     TaskHandle_t usb_uart_tx_thread_handle;
     status = xTaskCreate(usb_uart_tx_thread,
-                         "usb_uart_rx_thread",
+                         "usb_uart_tx_thread",
                          configMINIMAL_STACK_SIZE,
                          &usb_uart_config_list[channel],
                          SYSTEM_PRIORITY_LOW,
