@@ -37,6 +37,8 @@ typedef enum
     PLATFORM_TARGET_INTERFACE_SWD
 } platform_target_interface_mode_t;
 
+#define PLATFORM_TARGET_INTERFACE_NUM     (2)
+
 #define PLATFORM_USB_UART_INTERFACE_NUM   (2)
 
 //TODO: change to thread-safe variant

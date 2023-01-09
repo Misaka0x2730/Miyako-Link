@@ -117,7 +117,7 @@
 extern void System_Assert(const char* file, const int line);
 
 /* Define to trap errors during development. */
-#define configASSERT(x)                         if ((x) == 0) { System_Assert(__FILE__, __LINE__); }
+#define configASSERT                            assert
 
 /* Set the following definitions to 1 to include the API function, or zero
 to exclude the API function. */

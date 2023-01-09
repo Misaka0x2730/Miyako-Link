@@ -2,7 +2,7 @@
 #include "exception.h"
 
 #include "platform.h"
-#include "device_config.h"
+#include "led.h"
 
 #include "hardware/pio.h"
 #include "target_interface_non_iso_swd_low_access_read.pio.h"
@@ -53,12 +53,12 @@ bool platform_target_interface_non_iso_get_power(void)
 
 void platform_target_interface_non_iso_set_idle_state(bool state)
 {
-    system_pin_set_value(PIN_TARGET_1_LED_ACT, state);
+    led_set_state(LED_TARGET_1_ACT, state);
 }
 
 void platform_target_interface_non_iso_set_error_state(bool state)
 {
-    system_pin_set_value(PIN_TARGET_1_LED_ERR, state);
+    led_set_state(LED_TARGET_1_ERR, state);
 }
 
 static void platorm_pio_non_iso_swd_prog_config(pio_sm_config *prog_config, float clkdiv)
@@ -455,7 +455,7 @@ uint8_t platform_target_interface_non_iso_jtag_next(struct target_controller *tc
     }
 
     pio_sm_clear_fifos(pio0, 0);
-    //pio_sm_put_blocking(pio0, 0, data);
+
     pio_sm_put_blocking(pio0, 0, dTMS ? 1 : 0);
     pio_sm_put_blocking(pio0, 0, dTMS ? 1 : 0);
     pio_sm_put_blocking(pio0, 0, 0);

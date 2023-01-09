@@ -58,7 +58,7 @@ void mux_task_init(void)
                          SYSTEM_PRIORITY_LOWEST,
                          &mux_task);
 
-    //vTaskCoreAffinitySet(mux_task, 0x01);
+    vTaskCoreAffinitySet(mux_task, 0x01);
 }
 
 _Noreturn static void mux_task_thread(void *pParams)

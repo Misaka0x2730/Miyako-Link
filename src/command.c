@@ -89,10 +89,6 @@ const struct command_s cmd_list[] = {
 	{NULL, NULL, NULL}
 };
 
-#if defined(PLATFORM_HAS_DEBUG) && (PC_HOSTED == 0)
-bool debug_bmp;
-#endif
-
 int command_process(target_controller_t *tc, char *cmd)
 {
 	const struct command_s *c;
@@ -524,11 +520,17 @@ static bool cmd_traceswo(target *t, int argc, const char **argv)
 static bool cmd_debug_bmp(target *t, int argc, const char **argv)
 {
 	(void)t;
+    target_controller_t *tc = (target_controller_t*)argv[0];
+    argc--;
+    argv++;
+
+    bool *debug_bmp = &tc->debug_bmp;
+
 	bool print_status = false;
 	if (argc == 1) {
 		print_status = true;
 	} else if (argc == 2) {
-		if (parse_enable_or_disable(argv[1], &debug_bmp)) {
+		if (parse_enable_or_disable(argv[1], debug_bmp)) {
 			print_status = true;
 		}
 	} else {
@@ -537,7 +539,7 @@ static bool cmd_debug_bmp(target *t, int argc, const char **argv)
 
 	if (print_status) {
 		gdb_outf("Debug mode is %s\n",
-			 debug_bmp ? "enabled" : "disabled");
+			 *debug_bmp ? "enabled" : "disabled");
 	}
 	return true;
 }

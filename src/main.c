@@ -43,24 +43,20 @@
 #include "hardware/timer.h"
 #include "atomic.h"
 #include "mem_manager.h"
-#include "device_config.h"
+#include "device_settings.h"
 #include "wizchip_conf.h"
 #include "usb_task.h"
 #include "usb_cdc_task.h"
 #include "logging.h"
+#include "w5500_task.h"
+#include "tcp_server.h"
+#include "led.h"
 
 #include "system_pins.h"
 #include "stream_buffer.h"
-#include "usb_uart_task.h"
+#include "target_uart_task.h"
 
 #define GDB_THREAD_NAME_LENGTH	(20)
-/*#define GDB_STACK_SIZE			(THREAD_STACKSIZE_LARGE*2)
-#define MORSE_STACK_SIZE		(THREAD_STACKSIZE_TINY)
-#define GDB_THREAD_PRIO			(THREAD_PRIORITY_MAIN-2)
-#define MORSE_THREAD_PRIO		(THREAD_PRIORITY_MIN-1)
-
-static char gdb_stack[MAX_GDB_NUMBER][GDB_STACK_SIZE] = {0};
-static char morse_stack[INTERFACE_NUMBER][THREAD_STACKSIZE_TINY] = {0};*/
 
 void vApplicationStackOverflowHook( TaskHandle_t pxTask, char *pcTaskName );
 
@@ -232,15 +228,11 @@ _Noreturn void LogTaskThread(void *pParams)
 
 void wizchip_select(void)
 {
-    gpio_init(1);
-    gpio_set_dir(1, GPIO_OUT);
     gpio_put(1, 0);
 }
 
 void wizchip_deselect(void)
 {
-    gpio_init(1);
-    gpio_set_dir(1, GPIO_OUT);
     gpio_put(1, 1);
 }
 
@@ -254,6 +246,19 @@ void wizchip_write(uint8_t* pBuf, uint16_t len)
     spi_write_blocking(spi0, pBuf, len);
 }
 
+uint8_t wizchip_read_byte()
+{
+    uint8_t data = 0;
+    spi_read_blocking(spi0, 0xFF, &data, sizeof(data));
+    return data;
+}
+
+void wizchip_write_byte(uint8_t data)
+{
+    spi_write_blocking(spi0, &data, sizeof(data));
+}
+
+
 static SemaphoreHandle_t ethMutex;
 
 void wizchip_lock(void)
@@ -266,9 +271,12 @@ void wizchip_unlock(void)
     xSemaphoreGive(ethMutex);
 }
 
+StreamBufferHandle_t rx_stream;
+StreamBufferHandle_t tx_stream;
+
 void EthTaskThread(void *pParams)
 {
-    uint8_t memsize[2][8] = { { 2, 2, 2, 2, 2, 2, 2, 2 }, { 2, 2, 2, 2, 2, 2, 2, 2 } };
+    /*uint8_t memsize[2][8] = { { 2, 2, 2, 2, 2, 2, 2, 2 }, { 2, 2, 2, 2, 2, 2, 2, 2 } };
 
     wiz_NetInfo gWIZNETINFO = { .mac = {0x00, 0x08, 0xdc, 0xab, 0xcd, 0xef},
             .ip = {192, 168, 1, 2},
@@ -280,19 +288,24 @@ void EthTaskThread(void *pParams)
     ethMutex = xSemaphoreCreateMutex();
 
     spi_init(spi0, 33 * 1000 * 1000);
-    gpio_set_function(0, GPIO_FUNC_SPI);
-    gpio_set_function(2, GPIO_FUNC_SPI);
-    gpio_set_function(3, GPIO_FUNC_SPI);
+    gpio_set_function(PIN_ETH_MISO, GPIO_FUNC_SPI);
+    gpio_set_function(PIN_ETH_MOSI, GPIO_FUNC_SPI);
+    gpio_set_function(PIN_ETH_SCLK, GPIO_FUNC_SPI);
 
-    gpio_init(1);
-    gpio_set_dir(1, GPIO_OUT);
-    gpio_put(1, 1);
+    gpio_init(PIN_ETH_CS);
+    gpio_set_dir(PIN_ETH_CS, GPIO_OUT);
+    gpio_put(PIN_ETH_CS, 1);
 
-    gpio_init(4);
-    gpio_set_dir(4, GPIO_OUT);
-    gpio_put(4, 1);
+    gpio_init(PIN_ETH_RST);
+    gpio_set_dir(PIN_ETH_RST, GPIO_OUT);
+    gpio_put(PIN_ETH_RST, 1);
 
-    uint8_t reg = 0xFA;
+    gpio_init(PIN_ETH_INT);
+    gpio_set_dir(PIN_ETH_INT, GPIO_IN);
+    gpio_pull_up(PIN_ETH_INT);
+
+    gpio_set_irq_enabled_with_callback(PIN_ETH_INT, GPIO_IRQ_EDGE_FALL, true, w5500_int_callback);
+
     uint8_t mac[6] = {0x00, 0x08, 0xdc, 0xab, 0xcd, 0xef};
 
     memcpy(gWIZNETINFO.mac, mac, sizeof(mac));
@@ -300,6 +313,7 @@ void EthTaskThread(void *pParams)
     vTaskDelay(1000);
 
     reg_wizchip_cs_cbfunc(wizchip_select, wizchip_deselect);
+    reg_wizchip_spi_cbfunc(wizchip_read_byte, wizchip_write_byte);
     reg_wizchip_spiburst_cbfunc(wizchip_read, wizchip_write);
     reg_wizchip_cris_cbfunc(wizchip_lock, wizchip_unlock);
 
@@ -319,10 +333,14 @@ void EthTaskThread(void *pParams)
 
     ctlnetwork(CN_GET_NETINFO, (void*) &getInfoTest);
 
+    //tcp_server_task_init(0, "usb_gdb_rx_thread", "usb_gdb_tx_thread", rx_stream, tx_stream);
+
+    tcp_server_add_interface(0, 10032, "tcp_server_rx_thread", "tcp_server_tx_thread", rx_stream, tx_stream);
+
     while (1)
     {
         vTaskDelay(1000);
-    }
+    }*/
 }
 
 #include "gdb_hostio.h"
@@ -331,8 +349,7 @@ struct target_controller gdb_controller[2];
 QueueHandle_t rx_queue;
 QueueHandle_t tx_queue;
 
-StreamBufferHandle_t rx_stream;
-StreamBufferHandle_t tx_stream;
+
 StreamBufferHandle_t line_coding_stream;
 
 StreamBufferHandle_t usb_uart_rx_stream;
@@ -361,25 +378,13 @@ uint32_t gdb_rx_last_pos = 0;
 
 unsigned char gdb_if_getchar(void)
 {
-    unsigned char data;
-    TickType_t timeout = pdMS_TO_TICKS(20);
-
     if (gdb_rx_count)
     {
         gdb_rx_count--;
         return gdb_rx_buf[gdb_rx_last_pos++];
     }
 
-    if (xStreamBufferBytesAvailable(rx_stream) >= sizeof(data))
-    {
-        timeout = 0;
-    }
-
-    size_t received_bytes = 0;
-    do
-    {
-        received_bytes = xStreamBufferReceive(rx_stream, gdb_rx_buf, sizeof(gdb_rx_buf), timeout);
-    } while ((received_bytes == 0) && (timeout != 0));
+    size_t received_bytes = xStreamBufferReceive(rx_stream, gdb_rx_buf, sizeof(gdb_rx_buf), SYSTEM_WAIT_FOREVER);
 
     gdb_rx_count = received_bytes - 1;
     gdb_rx_last_pos = 1;
@@ -388,27 +393,13 @@ unsigned char gdb_if_getchar(void)
 
 unsigned char gdb_if_getchar_to(int timeout)
 {
-    unsigned char data = 0;
-    TickType_t stream_timeout = 20;
-
     if (gdb_rx_count)
     {
         gdb_rx_count--;
         return gdb_rx_buf[gdb_rx_last_pos++];
     }
 
-    if (xStreamBufferBytesAvailable(rx_stream) >= sizeof(data))
-    {
-        timeout = 0;
-    }
-
-    size_t received_bytes = 0;
-    const uint32_t tries_limit = timeout / stream_timeout;
-    uint32_t tries = 0;
-    do
-    {
-        received_bytes = xStreamBufferReceive(rx_stream, gdb_rx_buf, sizeof(gdb_rx_buf), pdMS_TO_TICKS(stream_timeout));
-    } while ((received_bytes == 0) && (tries++ < tries_limit));
+    size_t received_bytes = xStreamBufferReceive(rx_stream, gdb_rx_buf, sizeof(gdb_rx_buf), pdMS_TO_TICKS(timeout));
 
     if (received_bytes == 0)
     {
@@ -816,59 +807,6 @@ void on_uart_rx()
 }
 
 uint32_t current_write_buffer_index = 0;
-int test = 0;
-
-void dma1_handler()
-{
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    static uint32_t total_bytes = 0;
-
-    system_pin_set(PIN_TARGET_1_LED_SER);
-
-    dma_occured = true;
-
-    if (dma_channel_get_irq0_status(dma_chan1))
-    {
-        dma_channel_acknowledge_irq0(dma_chan1);
-        dma_channel_set_write_addr(dma_chan1, uart1_data1_buf[0], false);
-        dma_channel_set_trans_count(dma_chan1, 128, false);
-
-        size_t written_bytes = xStreamBufferSendFromISR(usb_uart_tx_stream, uart1_data1_buf[0], 256, &xHigherPriorityTaskWoken);
-        if (written_bytes != 256)
-        {
-            test = 0;
-        }
-        else
-        {
-            total_bytes += written_bytes;
-        }
-        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-    }
-    else if (dma_channel_get_irq0_status(dma_chan2))
-    {
-        dma_channel_acknowledge_irq0(dma_chan2);
-        dma_channel_set_write_addr(dma_chan2, uart1_data1_buf[1], false);
-        dma_channel_set_trans_count(dma_chan2, 128, false);
-
-        const uint32_t test1 = dma_channel_hw_addr(dma_chan1)->transfer_count;
-        size_t written_bytes = xStreamBufferSendFromISR(usb_uart_tx_stream, uart1_data1_buf[1], 256, &xHigherPriorityTaskWoken);
-        if (written_bytes != 256)
-        {
-            test = 0;
-        }
-        else
-        {
-            total_bytes += written_bytes;
-        }
-        const uint32_t test2 = dma_channel_hw_addr(dma_chan1)->transfer_count;
-        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-    }
-    else
-    {
-        //TODO: assert
-        test = 1;
-    }
-}
 
 /*_Noreturn void usb_uart_line_coding_thread(void *pParams)
 {
@@ -1003,9 +941,11 @@ void main(void)
 
     MemManager_Init();
 
-    device_config_init();
+    device_settings_init();
 
-    device_make_usb_descriptor(2);
+    led_init();
+
+    //device_make_usb_descriptor(2);
 
     BaseType_t status;
     /*status = xTaskCreate(LedTaskThread,
@@ -1017,12 +957,12 @@ void main(void)
 
 
     TaskHandle_t TestLedTask;
-    status = xTaskCreate(TestLedTaskThread,
+    /*status = xTaskCreate(TestLedTaskThread,
                                     "LEDTestTask",
                             configMINIMAL_STACK_SIZE,
                                     NULL,
                                     1,
-                                    &TestLedTask);
+                                    &TestLedTask);*/
 
     TaskHandle_t LogTask;
     /*status = xTaskCreate(LogTaskThread,
@@ -1032,20 +972,22 @@ void main(void)
                          1,
                          &LogTask);*/
 
-    TaskHandle_t EthTask;
-    /*status = xTaskCreate(EthTaskThread,
+    /*TaskHandle_t EthTask;
+    status = xTaskCreate(EthTaskThread,
                          "EthTask",
-                         512,
+                         configMINIMAL_STACK_SIZE*2,
                          NULL,
-                         1,
+                         SYSTEM_PRIORITY_LOWEST,
                          &EthTask);*/
+
+    w5500_task_init();
 
     TaskHandle_t gdb_main_thread_1;
     status = xTaskCreate(gdb_main_1,
                          "gdb_main_thread_1",
                          5192,
                          NULL,
-                         SYSTEM_PRIORITY_NORMAL,
+                         SYSTEM_PRIORITY_LOW,
                          &gdb_main_thread_1);
 
 
@@ -1055,9 +997,18 @@ void main(void)
     //cli_rx_queue = xQueueCreate(512, sizeof(char));
     //cli_tx_queue = xQueueCreate(512, sizeof(uint16_t));
 
-    rx_stream = xStreamBufferCreate(512, 256);
+    rx_stream = xStreamBufferCreate(4096, 1);
     tx_stream = xStreamBufferCreate(512, 256);
     line_coding_stream = xStreamBufferCreate(sizeof(cdc_line_coding_t)*5, sizeof(cdc_line_coding_t));
+
+    tcp_server_config_t *p_tcp_server_config = MemManager_Alloc(sizeof(tcp_server_config_t));
+    p_tcp_server_config->port = 10032;
+    p_tcp_server_config->send_eot = true;
+    p_tcp_server_config->rx_stream = rx_stream;
+    p_tcp_server_config->tx_stream = tx_stream;
+    p_tcp_server_config->socket_number = W5500_SOCK_UNUSED;
+
+    tcp_server_add(p_tcp_server_config);
 
     // And set up and enable the interrupt handlers
     //irq_set_exclusive_handler(UART1_IRQ, on_uart_rx);
@@ -1068,20 +1019,17 @@ void main(void)
 
     usb_task_init();
 
-    usb_cdc_test_task_init(0, "usb_gdb_rx_thread", "usb_gdb_tx_thread", rx_stream, tx_stream, line_coding_stream);
-
-    gpio_set_function(PIN_TARGET1_TX, GPIO_FUNC_UART);
-    gpio_set_function(PIN_TARGET1_RX, GPIO_FUNC_UART);
+    //usb_cdc_task_init(0, "usb_gdb_rx_thread", "usb_gdb_tx_thread", rx_stream, tx_stream, line_coding_stream);
 
     usb_uart_init();
-    usb_uart_add_interface(0);
+    //usb_uart_add_interface(0, 1);
 
     //usb_cdc_test_task_init(0, "usb_uart_rx_thread", "usb_uart_tx_thread", usb_uart_rx_stream, usb_uart_tx_stream);
     //usb_cdc_task_init(0, rx_queue, tx_queue);
     //usb_cdc_task_init(1, cli_rx_queue, cli_tx_queue);
 
     //vTaskCoreAffinitySet(LedTask, 0x01);
-    vTaskCoreAffinitySet(TestLedTask, 0x01);
+    //vTaskCoreAffinitySet(TestLedTask, 0x01);
     //vTaskCoreAffinitySet(LogTask, 0x01);
     //vTaskCoreAffinitySet(EthTask, 0x01);
     vTaskCoreAffinitySet(gdb_main_thread_1, 0x01);

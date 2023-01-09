@@ -82,7 +82,7 @@ uint8_t  sock_pack_info[_WIZCHIP_SOCK_NUM_] = {0,};
 
 #define CHECK_SOCKNUM()   \
    do{                    \
-      if(sn > _WIZCHIP_SOCK_NUM_) return SOCKERR_SOCKNUM;   \
+      if(sn >= _WIZCHIP_SOCK_NUM_) return SOCKERR_SOCKNUM;   \
    }while(0);             \
 
 #define CHECK_SOCKMODE(mode)  \
@@ -318,7 +318,7 @@ int32_t send(uint8_t sn, uint8_t * buf, uint16_t len)
 {
    uint8_t tmp=0;
    uint16_t freesize=0;
-   
+
    CHECK_SOCKNUM();
    CHECK_SOCKMODE(Sn_MR_TCP);
    CHECK_SOCKDATA();
@@ -340,7 +340,11 @@ int32_t send(uint8_t sn, uint8_t * buf, uint16_t len)
                return SOCK_BUSY;
             }
          #endif
-         sock_is_sending &= ~(1<<sn);         
+         sock_is_sending &= ~(1<<sn);
+            if (len == 0)
+            {
+                return (int32_t)len;
+            }
       }
       else if(tmp & Sn_IR_TIMEOUT)
       {
@@ -393,11 +397,13 @@ int32_t recv(uint8_t sn, uint8_t * buf, uint16_t len)
 #endif
 //
    CHECK_SOCKNUM();
-   CHECK_SOCKMODE(Sn_MR_TCP);
+   //CHECK_SOCKMODE(Sn_MR_TCP);
    CHECK_SOCKDATA();
    
-   recvsize = getSn_RxMAX(sn);
-   if(recvsize < len) len = recvsize;
+   //recvsize = getSn_RxMAX(sn);
+   //if(recvsize < len) len = recvsize;
+
+
       
 //A20150601 : For Integrating with W5300
 #if _WIZCHIP_ == 5300
@@ -406,7 +412,7 @@ int32_t recv(uint8_t sn, uint8_t * buf, uint16_t len)
    {
 #endif
 //
-      while(1)
+      /*while(1)
       {
          recvsize = getSn_RX_RSR(sn);
          tmp = getSn_SR(sn);
@@ -429,7 +435,7 @@ int32_t recv(uint8_t sn, uint8_t * buf, uint16_t len)
          }
          if((sock_io_mode & (1<<sn)) && (recvsize == 0)) return SOCK_BUSY;
          if(recvsize != 0) break;
-      };
+      };*/
 #if _WIZCHIP_ == 5300
    }
 #endif
@@ -475,11 +481,11 @@ int32_t recv(uint8_t sn, uint8_t * buf, uint16_t len)
    else sock_pack_info[sn] = PACK_COMPLETED;
    if(getSn_MR(sn) & Sn_MR_ALIGN) sock_remained_size[sn] = 0;
    //len = recvsize;
-#else   
-   if(recvsize < len) len = recvsize;   
+#else
+    while(getSn_CR(sn));
+   //if(recvsize < len) len = recvsize;
    wiz_recv_data(sn, buf, len);
-   setSn_CR(sn,Sn_CR_RECV);
-   while(getSn_CR(sn));
+   setSn_CR(sn, Sn_CR_RECV);
 #endif
      
    //M20150409 : Explicit Type Casting
@@ -800,6 +806,11 @@ int8_t  ctlsocket(uint8_t sn, ctlsock_type cstype, void* arg)
       case CS_CLR_INTERRUPT:
          if( (*(uint8_t*)arg) > SIK_ALL) return SOCKERR_ARG;
          setSn_IR(sn,*(uint8_t*)arg);
+
+         if (*(uint8_t*)arg & SIK_SENT)
+         {
+             sock_is_sending &= ~(1<<sn);
+         }
          break;
       case CS_GET_INTERRUPT:
          *((uint8_t*)arg) = getSn_IR(sn);

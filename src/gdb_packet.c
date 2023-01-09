@@ -198,18 +198,14 @@ void gdb_putpacket_f(const char *fmt, ...)
 void gdb_out(const char *buf)
 {
 	char *hexdata;
-	int i = strlen(buf)*2 + 1;
+	int len = strlen(buf)*2 + 1;
 
-    if (i >= GDB_PUT_PACKET_SIZE)
-    {
-        //TODO: assert
-        return;
-    }
+    SYS_ASSERT(len < GDB_PUT_PACKET_SIZE);
 
-    hexdata = MemManager_Alloc(i + 1);
+    hexdata = MemManager_Alloc(len + 1);
 	hexdata[0] = 'O';
-	hexify(hexdata+1, buf, strlen(buf));
-	gdb_putpacket(hexdata, i);
+	hexify(hexdata + 1, buf, strlen(buf));
+	gdb_putpacket(hexdata, len);
     MemManager_Free(hexdata);
 }
 

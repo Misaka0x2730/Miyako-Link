@@ -65,7 +65,7 @@
 uint8_t  WIZCHIP_READ(uint32_t AddrSel)
 {
    uint8_t ret;
-   uint8_t spi_data[3];
+   uint8_t spi_data[4] = { 0 };
 
    WIZCHIP_CRITICAL_ENTER();
    WIZCHIP.CS._select();
@@ -74,18 +74,19 @@ uint8_t  WIZCHIP_READ(uint32_t AddrSel)
 
    if(!WIZCHIP.IF.SPI._read_burst || !WIZCHIP.IF.SPI._write_burst) 	// byte operation
    {
-	   WIZCHIP.IF.SPI._write_byte((AddrSel & 0x00FF0000) >> 16);
+	    WIZCHIP.IF.SPI._write_byte((AddrSel & 0x00FF0000) >> 16);
 		WIZCHIP.IF.SPI._write_byte((AddrSel & 0x0000FF00) >>  8);
 		WIZCHIP.IF.SPI._write_byte((AddrSel & 0x000000FF) >>  0);
+        ret = WIZCHIP.IF.SPI._read_byte();
    }
    else																// burst operation
    {
 		spi_data[0] = (AddrSel & 0x00FF0000) >> 16;
 		spi_data[1] = (AddrSel & 0x0000FF00) >> 8;
 		spi_data[2] = (AddrSel & 0x000000FF) >> 0;
-		WIZCHIP.IF.SPI._write_burst(spi_data, 3);
+        spi_data[3] = 0xFF;
+        ret = WIZCHIP.IF.SPI._write_burst(spi_data, 4);
    }
-   ret = WIZCHIP.IF.SPI._read_byte();
 
    WIZCHIP.CS._deselect();
    WIZCHIP_CRITICAL_EXIT();
@@ -205,9 +206,12 @@ uint16_t getSn_TX_FSR(uint8_t sn)
 
 uint16_t getSn_RX_RSR(uint8_t sn)
 {
-   uint16_t val=0,val1=0;
+    uint8_t val[2] = { 0 };
 
-   do
+    WIZCHIP_READ_BUF(Sn_RX_RSR(sn), val, sizeof(val));
+
+    return ((uint16_t)val[0] << 8) + val[1];
+   /*do
    {
       val1 = WIZCHIP_READ(Sn_RX_RSR(sn));
       val1 = (val1 << 8) + WIZCHIP_READ(WIZCHIP_OFFSET_INC(Sn_RX_RSR(sn),1));
@@ -217,7 +221,7 @@ uint16_t getSn_RX_RSR(uint8_t sn)
         val = (val << 8) + WIZCHIP_READ(WIZCHIP_OFFSET_INC(Sn_RX_RSR(sn),1));
       }
    }while (val != val1);
-   return val;
+   return val;*/
 }
 
 void wiz_send_data(uint8_t sn, uint8_t *wizdata, uint16_t len)
@@ -241,17 +245,24 @@ void wiz_recv_data(uint8_t sn, uint8_t *wizdata, uint16_t len)
 {
    uint16_t ptr = 0;
    uint32_t addrsel = 0;
-   
+
+   static uint16_t rx_addr[_WIZCHIP_SOCK_NUM_] = { 0 };
+
    if(len == 0) return;
-   ptr = getSn_RX_RD(sn);
+
+    addrsel = ((uint32_t)rx_addr[sn] << 8) + (WIZCHIP_RXBUF_BLOCK(sn) << 3);
+
+   /*ptr = getSn_RX_RD(sn);
    //M20140501 : implict type casting -> explict type casting
    //addrsel = ((ptr << 8) + (WIZCHIP_RXBUF_BLOCK(sn) << 3);
    addrsel = ((uint32_t)ptr << 8) + (WIZCHIP_RXBUF_BLOCK(sn) << 3);
-   //
+   //*/
+
    WIZCHIP_READ_BUF(addrsel, wizdata, len);
-   ptr += len;
+   rx_addr[sn] += len;
+   //ptr += len;
    
-   setSn_RX_RD(sn,ptr);
+   setSn_RX_RD(sn, rx_addr[sn]);
 }
 
 

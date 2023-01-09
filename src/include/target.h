@@ -221,7 +221,12 @@ struct target_controller {
     void (*jtagtap_tdi_tdo_seq)(struct target_controller *tc, uint8_t *DO, const uint8_t final_tms, const uint8_t *DI, int ticks);
     void (*jtagtap_tdi_seq)(struct target_controller *tc, const uint8_t final_tms, const uint8_t *DI, int ticks);
 
+    bool debug_bmp;
+
     struct jtag_proc_s jtag_proc;
+
+    char *pbuf;
+    size_t pbuf_size;
 };
 
 typedef struct target_controller target_controller_t;

@@ -138,7 +138,7 @@ void 	wizchip_spi_readburst(uint8_t* pBuf, uint16_t len) 	{}
  * null function is called.
  */
 //void 	wizchip_spi_writeburst(uint8_t* pBuf, uint16_t len) {};
-void 	wizchip_spi_writeburst(uint8_t* pBuf, uint16_t len) {}
+uint8_t 	wizchip_spi_writeburst(uint8_t* pBuf, uint16_t len) {return 0xFF;}
 
 /**
  * @\ref _WIZCHIP instance
@@ -265,7 +265,7 @@ void reg_wizchip_spi_cbfunc(uint8_t (*spi_rb)(void), void (*spi_wb)(uint8_t wb))
 }
 
 // 20140626 Eric Added for SPI burst operations
-void reg_wizchip_spiburst_cbfunc(void (*spi_rb)(uint8_t* pBuf, uint16_t len), void (*spi_wb)(uint8_t* pBuf, uint16_t len))
+void reg_wizchip_spiburst_cbfunc(void (*spi_rb)(uint8_t* pBuf, uint16_t len), uint8_t (*spi_wb)(uint8_t* pBuf, uint16_t len))
 {
    while(!(WIZCHIP.if_mode & _WIZCHIP_IO_MODE_SPI_));
 

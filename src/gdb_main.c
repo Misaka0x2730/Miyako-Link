@@ -44,12 +44,8 @@ enum gdb_signal {
 	GDB_SIGLOST = 29,
 };
 
-#define BUF_SIZE	1024
-
 #define ERROR_IF_NO_TARGET()	\
 	if(!tc->cur_target) { gdb_putpacketz("EFF"); break; }
-
-static char pbuf[BUF_SIZE+1];
 
 static void handle_q_packet(struct target_controller *tc, char *packet, int len);
 static void handle_v_packet(struct target_controller *tc, char *packet, int len);
@@ -72,7 +68,7 @@ static void gdb_target_printf(struct target_controller *tc,
 	gdb_voutf(fmt, ap);
 }
 
-static struct target_controller gdb_controller = {
+/*static struct target_controller gdb_controller = {
 	.destroy_callback = gdb_target_destroy_callback,
 	.printf = gdb_target_printf,
 
@@ -91,7 +87,7 @@ static struct target_controller gdb_controller = {
     .cur_target = NULL,
     .last_target = NULL,
     .flash_mode = 0
-};
+};*/
 
 void gdb_main_init_target_controller(struct target_controller *tc)
 {
@@ -117,6 +113,12 @@ void gdb_main_init_target_controller(struct target_controller *tc)
 
     tc->platform_get_voltage = NULL;
     tc->jtag_proc.tc = tc;
+
+    tc->pbuf = MemManager_Alloc(POOL_SIZE_4096);
+    if (tc->pbuf)
+    {
+        tc->pbuf_size = POOL_SIZE_4096;
+    }
 }
 
 int gdb_main_loop(struct target_controller *tc, bool in_syscall)
@@ -124,10 +126,12 @@ int gdb_main_loop(struct target_controller *tc, bool in_syscall)
 	int size;
 	bool single_step = false;
 
+    char *pbuf = tc->pbuf;
+
 	/* GDB protocol main loop */
 	while(1) {
 		SET_IDLE_STATE(1);
-		size = gdb_getpacket(pbuf, BUF_SIZE);
+		size = gdb_getpacket(pbuf, (int)tc->pbuf_size);
 		SET_IDLE_STATE(0);
 		switch(pbuf[0]) {
 		/* Implementation of these is mandatory! */
@@ -310,7 +314,7 @@ int gdb_main_loop(struct target_controller *tc, bool in_syscall)
 				target_reset(tc->cur_target);
 			else if(tc->last_target) {
 				tc->cur_target = target_attach(tc->last_target,
-						           &gdb_controller);
+						           tc);
 				if(tc->cur_target)
 					morse(NULL, false);
 				target_reset(tc->cur_target);
@@ -384,6 +388,8 @@ handle_q_packet(struct target_controller *tc, char *packet, int len)
 {
 	uint32_t addr, alen;
 
+    char *pbuf = tc->pbuf;
+
 	if(!strncmp(packet, "qRcmd,", 6)) {
 		char *data;
 		int datalen;
@@ -408,14 +414,14 @@ handle_q_packet(struct target_controller *tc, char *packet, int len)
 
 	} else if (!strncmp (packet, "qSupported", 10)) {
 		/* Query supported protocol features */
-		gdb_putpacket_f("PacketSize=%X;qXfer:memory-map:read+;qXfer:features:read+", BUF_SIZE);
+		gdb_putpacket_f("PacketSize=%X;qXfer:memory-map:read+;qXfer:features:read+", tc->pbuf_size);
 
 	} else if (strncmp (packet, "qXfer:memory-map:read::", 23) == 0) {
 		/* Read target XML memory map */
 		if((!tc->cur_target) && tc->last_target) {
 			/* Attach to last target if detached. */
 			tc->cur_target = target_attach(tc->last_target,
-						   &gdb_controller);
+						   tc);
 		}
 		if (!tc->cur_target) {
 			gdb_putpacketz("E01");
@@ -430,7 +436,7 @@ handle_q_packet(struct target_controller *tc, char *packet, int len)
 		if((!tc->cur_target) && tc->last_target) {
 			/* Attach to last target if detached. */
 			tc->cur_target = target_attach(tc->last_target,
-						   &gdb_controller);
+						   tc);
 		}
 		if (!tc->cur_target) {
 			gdb_putpacketz("E01");
@@ -463,7 +469,7 @@ handle_v_packet(struct target_controller *tc, char *packet, int plen)
 
 	if (sscanf(packet, "vAttach;%08lx", &addr) == 1) {
 		/* Attach to remote target processor */
-		tc->cur_target = target_attach_n(addr, &gdb_controller);
+		tc->cur_target = target_attach_n(addr, tc);
 		if(tc->cur_target) {
 			morse(NULL, false);
 			gdb_putpacketz("T05");
@@ -505,7 +511,7 @@ handle_v_packet(struct target_controller *tc, char *packet, int plen)
 			gdb_putpacketz("T05");
 		} else if(tc->last_target) {
             tc->cur_target = target_attach(tc->last_target,
-						   &gdb_controller);
+						   tc);
 
 			/* If we were able to attach to the target again */
 			if (tc->cur_target) {
@@ -586,7 +592,7 @@ handle_z_packet(struct target_controller *tc, char *packet, int plen)
 	}
 }
 
-void gdb_main(void)
+/*void gdb_main(void)
 {
 	gdb_main_loop(&gdb_controller, false);
-}
+}*/

@@ -1,0 +1,4 @@
+#ifndef _TARGET_UART_TELNET_H
+#define _TARGET_UART_TELNET_H
+
+#endif // _TARGET_UART_TELNET_H

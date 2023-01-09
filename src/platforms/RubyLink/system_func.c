@@ -3,7 +3,7 @@
 
 #include "system_func.h"
 #include "mem_manager.h"
-#include "hardware/gpio.h"
+#include "pico/assert.h"
 #include "hardware/timer.h"
 #include "task.h"
 #include "semphr.h"
@@ -22,11 +22,6 @@ void System_Init(void)
 inline bool System_IsInInterrupt(void)
 {
     return taskCHECK_IF_IN_ISR();
-}
-
-void System_Assert(const char* file, const int line)
-{
-    //__BKPT(0);
 }
 
 void System_Log_Lock(void)
@@ -88,4 +83,9 @@ char* System_ReceiveLog(void)
     }
 
     return (char*)(address);
+}
+
+void System_Delay(uint32_t ms)
+{
+    vTaskDelay(pdMS_TO_TICKS(ms));
 }

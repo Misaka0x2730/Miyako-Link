@@ -1,0 +1,42 @@
+syntax = "proto2";
+
+import "nanopb.proto";
+
+message conf_message
+{
+    enum message_type
+    {
+        READ = 0;
+        WRITE = 1;
+    }
+
+    enum host_side
+    {
+        DISABLED = 0;
+        USB = 1;
+        ETH = 2;
+    }
+
+    message uart_config
+    {
+        required uint32 baud = 1;
+        required uint32 bits_parity_stop = 2;
+    }
+
+    message data_pipe_config
+    {
+        required pipe_type type = 1;
+
+        oneof arg
+        {
+            uint32 eth_port = 2;
+            uart_config uart_config = 3;
+        }
+
+        required uint32 data_pipe_num = 4;
+    }
+
+    required message_type type = 1;
+    repeated data_pipe_config config = 2 [(nanopb).max_count = 4];
+    required uint32 leds_enabled = 3;
+}

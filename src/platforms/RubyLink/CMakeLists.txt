@@ -10,6 +10,7 @@ target_include_directories(RubyLink PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/Ethernet
         ${CMAKE_CURRENT_SOURCE_DIR}/Ethernet/W5500
         ${CMAKE_CURRENT_SOURCE_DIR}/Internet/DHCP
+        ${CMAKE_CURRENT_SOURCE_DIR}/SysView
         )
 
 target_include_directories(RubyLink PUBLIC
@@ -78,14 +79,25 @@ target_sources(RubyLink PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/mux_task.c
         ${CMAKE_CURRENT_SOURCE_DIR}/mem_manager.c
         ${CMAKE_CURRENT_SOURCE_DIR}/eeprom.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/device_config.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/device_settings.c
         ${CMAKE_CURRENT_SOURCE_DIR}/usb_task.c
         ${CMAKE_CURRENT_SOURCE_DIR}/usb_cdc_task.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/usb_uart_task.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/target_uart_task.c
         ${CMAKE_CURRENT_SOURCE_DIR}/Ethernet/socket.c
         ${CMAKE_CURRENT_SOURCE_DIR}/Ethernet/wizchip_conf.c
         ${CMAKE_CURRENT_SOURCE_DIR}/Ethernet/W5500/w5500.c
         ${CMAKE_CURRENT_SOURCE_DIR}/Internet/DHCP/dhcp.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/SysView/SEGGER_RTT.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/SysView/SEGGER_SYSVIEW.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/SysView/SEGGER_SYSVIEW_Config_FreeRTOS.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/SysView/SEGGER_SYSVIEW_FreeRTOS.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/w5500_common.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/w5500_socket.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/w5500_task.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/tcp_server.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/target_uart_telnet.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/led.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/device_config_task.c
         )
 
 pico_generate_pio_header(RubyLink ${CMAKE_CURRENT_LIST_DIR}/pio/target_interface_non_iso_swd_low_write.pio)
@@ -110,5 +122,18 @@ IF(CMAKE_COMPILER_IS_GNUCC)
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0")
     set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O0")
 ENDIF(CMAKE_COMPILER_IS_GNUCC)
+
+set(PROTOBUF_PROTOC_EXECUTABLE ${CMAKE_CURRENT_SOURCE_DIR}/nanopb/generator-bin/protoc.exe)
+set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/nanopb/extra)
+find_package(Nanopb REQUIRED)
+target_include_directories(RubyLink PUBLIC ${NANOPB_INCLUDE_DIRS})
+
+nanopb_generate_cpp(PROTO_SRCS PROTO_HDRS device_config_message.proto)
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
+
+target_sources(RubyLink PUBLIC ${PROTO_HDRS} ${PROTO_SRCS})
+
+message(STATUS "${PROTO_SRCS}")
+message(STATUS "${PROTOBUF_PROTOC_EXECUTABLE}")
 
 pico_add_extra_outputs(RubyLink)

@@ -30,7 +30,7 @@
 #include "gdb_if.h"
 #include "FreeRTOS.h"
 #include "task.h"
-#include "device_config.h"
+#include "device_settings.h"
 #include "system_pins.h"
 #include "hardware/structs/systick.h"
 #include "hardware/structs/scb.h"
@@ -106,7 +106,8 @@ void platform_target_interface_max_frequency_set(struct target_controller *tc, u
 {
     if (platform_max_frequency_set(tc, frequency))
     {
-        device_config_set_value(tc->target_interface_param.frequency_setting_id, (uint8_t*)&frequency,sizeof(frequency));
+        /*device_settings_set_value(tc->target_interface_param.frequency_setting_id, (uint8_t *) &frequency,
+                                  sizeof(frequency));*/
     }
 }
 
@@ -128,7 +129,7 @@ void platform_target_interface_non_iso_init(struct target_controller *tc)
         tc->target_interface_param.min_frequency = TARGET_INTERFACE_1_MIN_FREQUENCY;
         tc->target_interface_param.max_frequency = TARGET_INTERFACE_1_MAX_FREQUENCY;
         tc->target_interface_param.tms_direction = TARGET_INTERFACE_TMS_DIR_NOT_INITIALIZED;
-        tc->target_interface_param.frequency_setting_id = DEVICE_CONF_TARGET_INTERFACE_CONFIG_1_FREQ;
+        //tc->target_interface_param.frequency_setting_id = DEVICE_SETTINGS_TARGET_INTERFACE_CONFIG_1_FREQ;
 
         tc->platform_get_voltage = platform_target_voltage;
         tc->platform_srst_set_val = platform_target_interface_non_iso_srst_set_val;
@@ -152,13 +153,7 @@ void platform_target_interface_non_iso_init(struct target_controller *tc)
         tc->platform_max_frequency_get = platform_target_interface_max_frequency_get;
         tc->jtag_proc.jtagtap_init = jtagtap_init;
 
-        uint32_t frequency = 0;
-        if (device_config_get_value(tc->target_interface_param.frequency_setting_id, (uint8_t*)&frequency, sizeof(frequency)) == sizeof(frequency))
-        {
-            platform_max_frequency_set(tc, frequency);
-        }
-
-
+        platform_max_frequency_set(tc, TARGET_INTERFACE_1_DEFAULT_FREQUENCY);
     }
 }
 
